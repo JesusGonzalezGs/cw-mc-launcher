@@ -1,0 +1,18 @@
+appId: com.cubewatcher.launcher
+productName: CW-MC Launcher
+directories:
+  output: dist
+  buildResources: resources
+files:
+  - out/**/*
+  - node_modules/**/*
+  - package.json
+win:
+  target: nsis
+  icon: resources/icon.ico
+mac:
+  target: dmg
+  icon: resources/icon.png
+linux:
+  target: AppImage
+  icon: resources/icon.png
