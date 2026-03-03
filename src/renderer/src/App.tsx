@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import TitleBar from './components/TitleBar'
 import Sidebar from './components/Sidebar'
 import AuthPage from './pages/AuthPage'
@@ -11,6 +11,7 @@ import ModpackDetailPage from './pages/ModpackDetailPage'
 import SettingsPage from './pages/SettingsPage'
 
 export default function App() {
+  const location = useLocation()
   const [activeAccount, setActiveAccount] = useState<any>(null)
   const [loading, setLoading] = useState(true)
 
@@ -47,7 +48,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<Navigate to="/instances" replace />} />
             <Route path="/instances" element={<InstancesPage />} />
-            <Route path="/instances/new" element={<NewInstancePage />} />
+            <Route path="/instances/new" element={<NewInstancePage key={location.key} />} />
             <Route path="/instances/:id" element={<InstanceDetailPage />} />
             <Route path="/catalog" element={<CatalogPage />} />
             <Route path="/catalog/:modpackId" element={<ModpackDetailPage />} />

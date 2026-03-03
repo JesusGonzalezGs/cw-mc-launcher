@@ -36,6 +36,14 @@ export default function NewInstancePage() {
   const [progress, setProgress] = useState<DownloadProgress | null>(null)
   const [installLog, setInstallLog] = useState<string[]>([])
   const logRef = useRef<HTMLDivElement>(null)
+  const navTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Limpiar el timeout de navegación si el componente se desmonta antes de que dispare
+  useEffect(() => {
+    return () => {
+      if (navTimeoutRef.current) clearTimeout(navTimeoutRef.current)
+    }
+  }, [])
 
   // Cargar versiones de Mojang al montar
   useEffect(() => {
@@ -167,7 +175,8 @@ export default function NewInstancePage() {
       })
 
       setProgress({ stage: '¡Listo!', percent: 100 })
-      setTimeout(() => navigate('/instances'), 400)
+      setCreating(false)
+      navTimeoutRef.current = setTimeout(() => navigate('/instances'), 400)
     } catch (e: any) {
       setError(e.message ?? 'Error al crear la instancia')
       setCreating(false)

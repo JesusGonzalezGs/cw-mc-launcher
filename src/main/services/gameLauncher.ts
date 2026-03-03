@@ -28,6 +28,38 @@ export function stopInstance(instanceId: string): void {
   }
 }
 
+/**
+ * NeoForge's new installer creates `minecraft-client-patched.jar` but older FML
+ * still looks for `client-{mcVersion}-{neoFormVersion}-srg.jar`. Copy if needed.
+ */
+function bridgeNeoForgeSrgJar(versionJson: any, librariesDir: string, versionId: string): void {
+  if (!versionId.toLowerCase().includes('neoforge')) return
+
+  const gameArgs: any[] = versionJson.arguments?.game ?? []
+  const strArgs = gameArgs.filter((a): a is string => typeof a === 'string')
+  const mcVersionIdx = strArgs.indexOf('--fml.mcVersion')
+  const neoFormVersionIdx = strArgs.indexOf('--fml.neoFormVersion')
+  const neoForgeVersionIdx = strArgs.indexOf('--fml.neoForgeVersion')
+  if (mcVersionIdx === -1 || neoFormVersionIdx === -1 || neoForgeVersionIdx === -1) return
+
+  const mcVersion = strArgs[mcVersionIdx + 1]
+  const neoFormVersion = strArgs[neoFormVersionIdx + 1]
+  const neoForgeVersion = strArgs[neoForgeVersionIdx + 1]
+  if (!mcVersion || !neoFormVersion || !neoForgeVersion) return
+
+  const srcPath = path.join(
+    librariesDir, 'net', 'neoforged', 'minecraft-client-patched', neoForgeVersion,
+    `minecraft-client-patched-${neoForgeVersion}.jar`
+  )
+  const targetDir = path.join(librariesDir, 'net', 'minecraft', 'client', `${mcVersion}-${neoFormVersion}`)
+  const targetPath = path.join(targetDir, `client-${mcVersion}-${neoFormVersion}-srg.jar`)
+
+  if (fs.existsSync(srcPath) && !fs.existsSync(targetPath)) {
+    fs.mkdirSync(targetDir, { recursive: true })
+    fs.copyFileSync(srcPath, targetPath)
+  }
+}
+
 function resolveJavaExe(mcVersion: string): string {
   const ver = getMcJavaVersion(mcVersion)
   if (isJavaReady(ver)) return getJavaExe(ver)
@@ -139,11 +171,15 @@ export async function launchInstance(
   fs.mkdirSync(nativesDir, { recursive: true })
   fs.mkdirSync(instanceDir, { recursive: true })
 
+  // NeoForge: bridge minecraft-client-patched.jar → client-srg.jar if needed
+  bridgeNeoForgeSrgJar(effectiveJson, path.join(settings.assetsDir, '..', 'libraries'), instance.resolvedVersionId)
+
   const javaExe = resolveJavaExe(instance.mcVersion)
   const classpath = buildClasspath(effectiveJson, settings)
   const mainClass = effectiveJson.mainClass
 
   const assetIndex = effectiveJson.assetIndex?.id ?? effectiveJson.assets ?? instance.mcVersion
+  const librariesDir = path.resolve(path.join(settings.assetsDir, '..', 'libraries'))
 
   const vars: Record<string, string> = {
     auth_player_name: account.username,
@@ -159,6 +195,7 @@ export async function launchInstance(
     launcher_name: 'cw-mc-launcher',
     launcher_version: '0.1.0',
     classpath,
+    library_directory: librariesDir,
   }
 
   const features: Record<string, boolean> = {

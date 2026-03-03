@@ -147,6 +147,40 @@ async function downloadLoaderLibraries(
   }
 }
 
+/**
+ * NeoForge's new installer creates `minecraft-client-patched.jar` but older FML
+ * still looks for `client-{mcVersion}-{neoFormVersion}-srg.jar`. Copy if needed.
+ */
+function bridgeNeoForgeSrgJar(
+  versionJsonPath: string,
+  neoForgeVersion: string,
+  librariesDir: string
+): void {
+  if (!fs.existsSync(versionJsonPath)) return
+  const versionJson = JSON.parse(fs.readFileSync(versionJsonPath, 'utf-8'))
+
+  const gameArgs: string[] = versionJson.arguments?.game ?? []
+  const mcVersionIdx = gameArgs.indexOf('--fml.mcVersion')
+  const neoFormVersionIdx = gameArgs.indexOf('--fml.neoFormVersion')
+  if (mcVersionIdx === -1 || neoFormVersionIdx === -1) return
+
+  const mcVersion = gameArgs[mcVersionIdx + 1]
+  const neoFormVersion = gameArgs[neoFormVersionIdx + 1]
+  if (!mcVersion || !neoFormVersion) return
+
+  const srcPath = path.join(
+    librariesDir, 'net', 'neoforged', 'minecraft-client-patched', neoForgeVersion,
+    `minecraft-client-patched-${neoForgeVersion}.jar`
+  )
+  const targetDir = path.join(librariesDir, 'net', 'minecraft', 'client', `${mcVersion}-${neoFormVersion}`)
+  const targetPath = path.join(targetDir, `client-${mcVersion}-${neoFormVersion}-srg.jar`)
+
+  if (fs.existsSync(srcPath) && !fs.existsSync(targetPath)) {
+    fs.mkdirSync(targetDir, { recursive: true })
+    fs.copyFileSync(srcPath, targetPath)
+  }
+}
+
 /** Downloads any libraries listed in a Forge/NeoForge version JSON that are missing from disk. */
 async function downloadMissingVersionLibraries(
   versionJsonPath: string,
@@ -403,13 +437,17 @@ export async function installNeoForge(
   }
   installedVersionId ??= `neoforge-${neoForgeVersion}`
 
-  // Post-install: descargar librerías faltantes del version JSON (ej. client-srg.jar)
+  // Post-install: descargar librerías faltantes del version JSON
   onProgress?.('Verificando bibliotecas de NeoForge...', 90)
+  const neoVersionJsonPath = path.join(versionsDir, installedVersionId, `${installedVersionId}.json`)
   await downloadMissingVersionLibraries(
-    path.join(versionsDir, installedVersionId, `${installedVersionId}.json`),
+    neoVersionJsonPath,
     librariesDir,
     (msg) => onProgress?.(msg, 92)
   )
+
+  // Compatibilidad: FML busca client-srg.jar pero el instalador nuevo crea minecraft-client-patched.jar
+  bridgeNeoForgeSrgJar(neoVersionJsonPath, neoForgeVersion, librariesDir)
 
   onProgress?.('NeoForge instalado correctamente', 100)
   return installedVersionId
