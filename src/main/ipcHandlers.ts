@@ -25,6 +25,7 @@ import {
   getInstance,
   createInstance,
   deleteInstance,
+  cloneInstance,
   listMods,
   toggleMod,
   removeMod,
@@ -51,6 +52,7 @@ import {
   cfGetModDescription,
   cfGetModFiles,
   cfGetDownloadUrl,
+  cfGetCategories,
 } from './services/curseforgeService'
 import { installCurseForgeModpack } from './services/modpackInstaller'
 import { launchInstance, isInstanceRunning, stopInstance } from './services/gameLauncher'
@@ -143,6 +145,8 @@ export function registerIpcHandlers(): void {
     deleteInstance(id)
     return { ok: true }
   })
+
+  ipcMain.handle('instances:clone', async (_, id: string) => cloneInstance(id))
 
   ipcMain.handle('instances:isRunning', (_, id: string) => isInstanceRunning(id))
 
@@ -250,6 +254,8 @@ export function registerIpcHandlers(): void {
     cfSearch({ ...params, classId: 6 })
   )
 
+  ipcMain.handle('cf:getCategories', () => cfGetCategories(4471))
+
   ipcMain.handle('cf:getMod', (_, modId: number) => cfGetMod(modId))
 
   ipcMain.handle('cf:getModDescription', (_, modId: number) => cfGetModDescription(modId))
@@ -258,11 +264,11 @@ export function registerIpcHandlers(): void {
     cfGetModFiles(modId, gameVersion, loaderType)
   )
 
-  ipcMain.handle('cf:installModpack', async (_, modpackId: number, fileId: number, name: string, logoUrl?: string) => {
+  ipcMain.handle('cf:installModpack', async (_, modpackId: number, fileId: number, name: string, logoUrl?: string, fileVersion?: string) => {
     const win = getMainWindow()
     const instance = await installCurseForgeModpack(modpackId, fileId, name, logoUrl, (p) => {
       win?.webContents.send('cf:installProgress', p)
-    })
+    }, fileVersion)
     return instance
   })
 

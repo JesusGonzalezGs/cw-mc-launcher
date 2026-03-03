@@ -29,6 +29,7 @@ declare global {
         get: (id: string) => Promise<any>
         create: (params: any) => Promise<any>
         delete: (id: string) => Promise<any>
+        clone: (id: string) => Promise<any>
         isRunning: (id: string) => Promise<boolean>
         stop: (id: string) => Promise<any>
         launch: (instance: any) => Promise<any>
@@ -55,10 +56,11 @@ declare global {
       cf: {
         searchModpacks: (params: any) => Promise<any>
         searchMods: (params: any) => Promise<any>
+        getCategories: () => Promise<any>
         getMod: (modId: number) => Promise<any>
         getModDescription: (modId: number) => Promise<string>
         getModFiles: (modId: number, gameVersion?: string, loaderType?: number) => Promise<any>
-        installModpack: (modpackId: number, fileId: number, name: string, logoUrl?: string) => Promise<any>
+        installModpack: (modpackId: number, fileId: number, name: string, logoUrl?: string, fileVersion?: string) => Promise<any>
       }
       settings: {
         get: () => Promise<any>

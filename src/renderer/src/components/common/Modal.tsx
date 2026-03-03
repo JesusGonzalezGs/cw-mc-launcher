@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react'
+import React, { useEffect, type ElementType } from 'react'
 import { X } from 'lucide-react'
 import { useFocusTrap } from '../../hooks/useFocusTrap'
 
@@ -8,9 +8,21 @@ interface ModalProps {
   title: string
   children: React.ReactNode
   maxWidth?: string
+  icon?: ElementType
+  iconColor?: string
+  iconBg?: string
 }
 
-export default function Modal({ open, onClose, title, children, maxWidth = 'max-w-md' }: ModalProps) {
+export default function Modal({
+  open,
+  onClose,
+  title,
+  children,
+  maxWidth = 'max-w-md',
+  icon: Icon,
+  iconColor = 'text-purple-400',
+  iconBg = 'bg-purple-500/15',
+}: ModalProps) {
   const containerRef = useFocusTrap(open)
 
   useEffect(() => {
@@ -28,26 +40,36 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'max-
   if (!open) return null
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" aria-hidden={!open}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4" aria-hidden={!open}>
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} aria-hidden="true" />
       <div
         ref={containerRef as React.RefObject<HTMLDivElement>}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className={`relative w-full ${maxWidth} rounded-2xl shadow-2xl border bg-gray-900 border-gray-700 text-white`}
+        className={`relative w-full ${maxWidth} rounded-2xl shadow-2xl border bg-gradient-to-br from-gray-800 to-gray-900 border-purple-500/30`}
       >
-        <div className="flex items-center justify-between p-5 border-b border-gray-700">
-          <h2 id="modal-title" className="text-lg font-semibold">{title}</h2>
+        {/* Header */}
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700/60">
+          <div className="flex items-center gap-2">
+            {Icon && (
+              <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${iconBg}`}>
+                <Icon size={14} className={iconColor} aria-hidden="true" />
+              </div>
+            )}
+            <h2 id="modal-title" className="font-semibold text-sm text-white">{title}</h2>
+          </div>
           <button
             onClick={onClose}
             aria-label="Cerrar"
             className="p-1.5 rounded-lg transition-colors hover:bg-gray-700 text-gray-400 hover:text-white"
           >
-            <X size={18} aria-hidden="true" />
+            <X size={15} aria-hidden="true" />
           </button>
         </div>
-        <div className="p-5">{children}</div>
+
+        {/* Content */}
+        <div className="px-5 py-4">{children}</div>
       </div>
     </div>
   )

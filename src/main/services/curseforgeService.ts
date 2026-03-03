@@ -64,6 +64,9 @@ export interface CfSearchParams {
   searchFilter?: string
   gameVersion?: string
   modLoaderType?: number
+  sortField?: number    // 2=Popularity, 3=LastUpdated, 4=Name, 6=TotalDownloads
+  sortOrder?: 'asc' | 'desc'
+  categoryId?: number
   pageSize?: number
   index?: number
 }
@@ -74,11 +77,21 @@ export async function cfSearch(params: CfSearchParams) {
   if (params.searchFilter) p.set('searchFilter', params.searchFilter)
   if (params.gameVersion) p.set('gameVersion', params.gameVersion)
   if (params.modLoaderType) p.set('modLoaderType', String(params.modLoaderType))
+  if (params.sortField) p.set('sortField', String(params.sortField))
+  if (params.sortOrder) p.set('sortOrder', params.sortOrder)
+  if (params.categoryId) p.set('categoryId', String(params.categoryId))
   if (params.pageSize) p.set('pageSize', String(params.pageSize))
   if (params.index !== undefined) p.set('index', String(params.index))
 
   const resp = await fetch(`${CF_BASE}/mods/search?${p}`, { headers: cfHeaders() })
   if (!resp.ok) throw new Error(`CurseForge search error: ${resp.status}`)
+  return resp.json()
+}
+
+export async function cfGetCategories(classId = 4471) {
+  const p = new URLSearchParams({ gameId: '432', classId: String(classId) })
+  const resp = await fetch(`${CF_BASE}/categories?${p}`, { headers: cfHeaders() })
+  if (!resp.ok) throw new Error(`CurseForge categories error: ${resp.status}`)
   return resp.json()
 }
 

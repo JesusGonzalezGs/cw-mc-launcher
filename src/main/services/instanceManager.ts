@@ -29,6 +29,7 @@ export interface Instance {
     fileId: number
     name: string
     logoUrl?: string
+    fileVersion?: string
   }
 }
 
@@ -89,6 +90,24 @@ export function deleteInstance(id: string): void {
   if (fs.existsSync(dir)) {
     fs.rmSync(dir, { recursive: true, force: true })
   }
+}
+
+export function cloneInstance(id: string): Instance {
+  const source = getInstance(id)
+  if (!source) throw new Error(`Instancia ${id} no encontrada`)
+  const newId = uuidV4()
+  const sourceDir = getInstanceDir(id)
+  const targetDir = getInstanceDir(newId)
+  fs.cpSync(sourceDir, targetDir, { recursive: true })
+  const allNames = new Set(listInstances().map((i) => i.name))
+  let newName = `${source.name} (Copia)`
+  let n = 2
+  while (allNames.has(newName)) {
+    newName = `${source.name} (Copia ${n++})`
+  }
+  const clone: Instance = { ...source, id: newId, name: newName, lastPlayed: undefined }
+  saveInstance(clone)
+  return clone
 }
 
 export function updateLastPlayed(id: string): void {

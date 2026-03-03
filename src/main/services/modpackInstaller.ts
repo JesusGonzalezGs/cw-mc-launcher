@@ -41,7 +41,8 @@ export async function installCurseForgeModpack(
   fileId: number,
   cfName: string,
   cfLogoUrl: string | undefined,
-  onProgress: (p: InstallProgress) => void
+  onProgress: (p: InstallProgress) => void,
+  cfFileVersion?: string
 ): Promise<Instance> {
   // 1. Obtener URL de descarga
   onProgress({ stage: 'Obteniendo URL del modpack...', current: 0, total: 100, percent: 0 })
@@ -84,7 +85,7 @@ export async function installCurseForgeModpack(
     modLoaderVersion: loaderVersion,
     resolvedVersionId: mcVersion,
     source: 'curseforge',
-    cfMeta: { modpackId, fileId, name: cfName, logoUrl: cfLogoUrl },
+    cfMeta: { modpackId, fileId, name: cfName, logoUrl: cfLogoUrl, fileVersion: cfFileVersion },
   })
 
   const instanceDir = getInstanceDir(instance.id)

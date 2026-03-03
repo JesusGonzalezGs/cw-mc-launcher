@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react'
-import { LogOut, Download, Check, User, Key } from 'lucide-react'
+import { LogOut, Download, Check, User, Key, Settings, AlertCircle } from 'lucide-react'
 import type { AppSettings, Account, JavaStatus } from '../types'
 import ProgressBar from '../components/ProgressBar'
 
 interface Props {
   onAccountChange: (acc: any) => void
 }
+
+const CARD = 'bg-gradient-to-br from-gray-800/90 via-purple-950/10 to-gray-900 border border-purple-500/25'
 
 export default function SettingsPage({ onAccountChange }: Props) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
@@ -26,7 +28,6 @@ export default function SettingsPage({ onAccountChange }: Props) {
 
   useEffect(() => {
     load()
-    // Polling de estado de Java
     const interval = setInterval(async () => {
       const s = await window.launcher.java.pollStatus()
       setJavaStatuses(s)
@@ -62,136 +63,160 @@ export default function SettingsPage({ onAccountChange }: Props) {
   if (!settings) return null
 
   return (
-    <div className="p-6 max-w-xl space-y-8">
-      <h1 className="text-xl font-bold text-white">Ajustes</h1>
+    <div className="relative">
 
-      {/* Cuentas */}
-      <section>
-        <h2 className="text-base font-semibold text-white mb-3">Cuentas</h2>
-        <div className="space-y-2">
-          {accounts.map((acc) => (
-            <div key={acc.id} className="flex items-center justify-between bg-gray-800 border border-gray-700 rounded-xl px-4 py-3">
-              <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${acc.type === 'msa' ? 'bg-blue-600' : 'bg-gray-600'}`}>
-                  <User size={16} className="text-white" />
-                </div>
-                <div>
-                  <p className="text-white text-sm font-medium">{acc.username}</p>
-                  <p className="text-gray-500 text-xs">{acc.type === 'msa' ? 'Cuenta Microsoft' : 'Offline'}</p>
-                </div>
-                {acc.id === settings.activeAccountId && (
-                  <span className="text-xs bg-purple-600/20 text-purple-400 border border-purple-500/30 px-2 py-0.5 rounded-full">Activa</span>
-                )}
-              </div>
-              <div className="flex items-center gap-2">
-                {acc.id !== settings.activeAccountId && (
-                  <button
-                    onClick={() => handleSetActive(acc.id)}
-                    className="text-xs text-gray-500 hover:text-purple-400 transition-colors"
-                  >
-                    Activar
-                  </button>
-                )}
-                <button
-                  onClick={() => handleLogout(acc.id)}
-                  className="p-1.5 text-gray-600 hover:text-red-400 transition-colors"
-                  title="Cerrar sesión"
-                >
-                  <LogOut size={14} />
-                </button>
-              </div>
-            </div>
-          ))}
+      {/* Decorative blobs */}
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-32 -right-32 w-[480px] h-[480px] rounded-full blur-3xl opacity-15 bg-purple-600" />
+        <div className="absolute -bottom-40 -left-40 w-[420px] h-[420px] rounded-full blur-3xl opacity-10 bg-pink-600" />
+      </div>
+
+      <div className="relative z-10 max-w-xl mx-auto px-4 md:px-6 pt-8 pb-16 space-y-8">
+
+        {/* Header */}
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border mb-3 bg-purple-500/10 border-purple-500/25 text-purple-300">
+            <Settings size={11} />
+            Configuración
+          </div>
+          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent">
+            Ajustes
+          </h1>
         </div>
-      </section>
 
-      {/* Java */}
-      <section>
-        <h2 className="text-base font-semibold text-white mb-3">Versiones de Java</h2>
-        <div className="space-y-2">
-          {javaStatuses.map((j) => (
-            <div key={j.version} className="bg-gray-800 border border-gray-700 rounded-xl px-4 py-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-white text-sm font-medium">Java {j.version}</p>
-                  <p className="text-gray-500 text-xs">
-                    {j.ready ? 'Instalado' : j.status === 'downloading' ? 'Descargando...' : 'No instalado'}
-                  </p>
-                </div>
-                {j.ready ? (
-                  <div className="flex items-center gap-1 text-green-400">
-                    <Check size={14} />
-                    <span className="text-xs">Listo</span>
+        {/* ── Cuentas ───────────────────────────────────────────────────────── */}
+        <section>
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-3">Cuentas</h2>
+          <div className="space-y-2">
+            {accounts.map((acc) => (
+              <div key={acc.id} className={`flex items-center justify-between ${CARD} rounded-xl px-4 py-3`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center ${acc.type === 'msa' ? 'bg-blue-600' : 'bg-purple-600/40'}`}>
+                    <User size={15} className="text-white" />
                   </div>
-                ) : j.status !== 'downloading' && (
-                  <button
-                    onClick={() => handleDownloadJava(j.version)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/30 text-purple-400 rounded-lg text-xs transition-colors"
-                  >
-                    <Download size={12} />
-                    Descargar
-                  </button>
-                )}
-              </div>
-              {j.status === 'downloading' && (
-                <div className="mt-2">
-                  <ProgressBar percent={j.progress} />
+                  <div>
+                    <p className="text-white text-sm font-medium">{acc.username}</p>
+                    <p className="text-gray-500 text-xs">{acc.type === 'msa' ? 'Cuenta Microsoft' : 'Offline'}</p>
+                  </div>
+                  {acc.id === settings.activeAccountId && (
+                    <span className="text-xs bg-purple-600/20 text-purple-400 border border-purple-500/30 px-2 py-0.5 rounded-full">Activa</span>
+                  )}
                 </div>
-              )}
-              {j.error && <p className="text-red-400 text-xs mt-1">{j.error}</p>}
-            </div>
-          ))}
-        </div>
-      </section>
+                <div className="flex items-center gap-2">
+                  {acc.id !== settings.activeAccountId && (
+                    <button
+                      onClick={() => handleSetActive(acc.id)}
+                      className="text-xs text-gray-500 hover:text-purple-400 transition-colors"
+                    >
+                      Activar
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleLogout(acc.id)}
+                    className="p-1.5 text-gray-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10"
+                    title="Cerrar sesión"
+                  >
+                    <LogOut size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+            {accounts.length === 0 && (
+              <p className="text-gray-600 text-sm py-2">No hay cuentas guardadas.</p>
+            )}
+          </div>
+        </section>
 
-      {/* JVM args globales */}
-      <section>
-        <h2 className="text-base font-semibold text-white mb-3">Configuración de JVM</h2>
-        <div className="space-y-3">
-          <div>
+        {/* ── Java ─────────────────────────────────────────────────────────── */}
+        <section>
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-3">Versiones de Java</h2>
+          <div className="space-y-2">
+            {javaStatuses.map((j) => (
+              <div key={j.version} className={`${CARD} rounded-xl px-4 py-3`}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-white text-sm font-medium">Java {j.version}</p>
+                    <p className="text-gray-500 text-xs">
+                      {j.ready ? 'Instalado' : j.status === 'downloading' ? 'Descargando...' : 'No instalado'}
+                    </p>
+                  </div>
+                  {j.ready ? (
+                    <div className="flex items-center gap-1.5 text-green-400 bg-green-500/10 border border-green-500/25 px-2.5 py-1 rounded-lg">
+                      <Check size={13} />
+                      <span className="text-xs font-medium">Listo</span>
+                    </div>
+                  ) : j.status !== 'downloading' && (
+                    <button
+                      onClick={() => handleDownloadJava(j.version)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg text-xs font-medium transition-all hover:scale-[1.02] active:scale-95 shadow-sm"
+                    >
+                      <Download size={12} />
+                      Descargar
+                    </button>
+                  )}
+                </div>
+                {j.status === 'downloading' && (
+                  <div className="mt-2">
+                    <ProgressBar percent={j.progress} />
+                  </div>
+                )}
+                {j.error && <p className="text-red-400 text-xs mt-1">{j.error}</p>}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* ── JVM args ─────────────────────────────────────────────────────── */}
+        <section>
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-3">Configuración de JVM</h2>
+          <div className={`${CARD} rounded-xl p-4`}>
             <label className="block text-sm text-gray-400 mb-1.5">Argumentos JVM globales</label>
             <input
               type="text"
               value={settings.jvmArgs}
               onChange={(e) => setSettings({ ...settings, jvmArgs: e.target.value })}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-purple-500 transition-colors"
+              placeholder="-Xmx4G -XX:+UseG1GC"
+              className="w-full bg-gray-800/80 border border-gray-700/80 rounded-xl px-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
             />
+            <p className="text-xs text-gray-600 mt-1.5">Se aplica a todas las instancias salvo que se indique lo contrario</p>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* CurseForge API */}
-      <section>
-        <h2 className="text-base font-semibold text-white mb-3">CurseForge API</h2>
-        <div>
-          <label className="block text-sm text-gray-400 mb-1.5">API Key</label>
-          <div className="relative">
-            <Key size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
-            <input
-              type="password"
-              value={settings.cfApiToken}
-              onChange={(e) => setSettings({ ...settings, cfApiToken: e.target.value })}
-              placeholder="$2a$10$..."
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl pl-9 pr-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-purple-500 transition-colors"
-            />
+        {/* ── CurseForge API ────────────────────────────────────────────────── */}
+        <section>
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-3">CurseForge API</h2>
+          <div className={`${CARD} rounded-xl p-4`}>
+            <label className="block text-sm text-gray-400 mb-1.5">API Key</label>
+            <div className="relative">
+              <Key size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+              <input
+                type="password"
+                value={settings.cfApiToken}
+                onChange={(e) => setSettings({ ...settings, cfApiToken: e.target.value })}
+                placeholder="$2a$10$..."
+                className="w-full bg-gray-800/80 border border-gray-700/80 rounded-xl pl-9 pr-4 py-2.5 text-white font-mono text-sm focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+              />
+            </div>
+            <p className="text-xs text-gray-600 mt-1.5">Necesaria para buscar mods y modpacks en CurseForge</p>
           </div>
-          <p className="text-xs text-gray-600 mt-1">Necesaria para buscar mods y modpacks en CurseForge</p>
-        </div>
-      </section>
+        </section>
 
-      <div className="flex items-center gap-3">
-        <button
-          onClick={handleSave}
-          className="px-5 py-2.5 bg-purple-600 hover:bg-purple-500 text-white rounded-xl text-sm font-medium transition-colors"
-        >
-          Guardar ajustes
-        </button>
-        {saved && (
-          <div className="flex items-center gap-1.5 text-green-400 text-sm">
-            <Check size={15} />
-            Guardado
-          </div>
-        )}
+        {/* ── Save ─────────────────────────────────────────────────────────── */}
+        <div className="flex items-center gap-3 pt-2">
+          <button
+            onClick={handleSave}
+            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl text-sm font-semibold transition-all hover:scale-[1.02] active:scale-95 shadow-md shadow-purple-900/20"
+          >
+            Guardar ajustes
+          </button>
+          {saved && (
+            <div className="flex items-center gap-1.5 text-green-400 text-sm">
+              <Check size={15} />
+              Guardado
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   )

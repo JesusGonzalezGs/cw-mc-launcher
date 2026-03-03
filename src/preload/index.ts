@@ -41,6 +41,7 @@ contextBridge.exposeInMainWorld('launcher', {
     get: (id: string) => ipcRenderer.invoke('instances:get', id),
     create: (params: any) => ipcRenderer.invoke('instances:create', params),
     delete: (id: string) => ipcRenderer.invoke('instances:delete', id),
+    clone: (id: string) => ipcRenderer.invoke('instances:clone', id),
     isRunning: (id: string) => ipcRenderer.invoke('instances:isRunning', id),
     stop: (id: string) => ipcRenderer.invoke('instances:stop', id),
     launch: (instance: any) => ipcRenderer.invoke('instances:launch', instance),
@@ -74,12 +75,13 @@ contextBridge.exposeInMainWorld('launcher', {
   cf: {
     searchModpacks: (params: any) => ipcRenderer.invoke('cf:searchModpacks', params),
     searchMods: (params: any) => ipcRenderer.invoke('cf:searchMods', params),
+    getCategories: () => ipcRenderer.invoke('cf:getCategories'),
     getMod: (modId: number) => ipcRenderer.invoke('cf:getMod', modId),
     getModDescription: (modId: number) => ipcRenderer.invoke('cf:getModDescription', modId),
     getModFiles: (modId: number, gameVersion?: string, loaderType?: number) =>
       ipcRenderer.invoke('cf:getModFiles', modId, gameVersion, loaderType),
-    installModpack: (modpackId: number, fileId: number, name: string, logoUrl?: string) =>
-      ipcRenderer.invoke('cf:installModpack', modpackId, fileId, name, logoUrl),
+    installModpack: (modpackId: number, fileId: number, name: string, logoUrl?: string, fileVersion?: string) =>
+      ipcRenderer.invoke('cf:installModpack', modpackId, fileId, name, logoUrl, fileVersion),
   },
 
   // ── Settings ─────────────────────────────────────────────────────────────────

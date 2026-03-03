@@ -39,18 +39,29 @@ export default function AuthPage({ onLogin }: Props) {
   }
 
   return (
-    <div className="flex-1 flex items-center justify-center bg-gray-900">
-      <div className="w-full max-w-sm">
+    <div className="flex-1 flex items-center justify-center relative bg-[radial-gradient(ellipse_at_top,_#1e1040_0%,_#0f0f1a_60%,_#0a0a14_100%)]">
+
+      {/* Decorative blobs */}
+      <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">
+        <div className="absolute -top-32 -right-32 w-[480px] h-[480px] rounded-full blur-3xl opacity-15 bg-purple-600" />
+        <div className="absolute -bottom-40 -left-40 w-[420px] h-[420px] rounded-full blur-3xl opacity-10 bg-pink-600" />
+      </div>
+
+      <div className="relative z-10 w-full max-w-sm px-4">
+
         {/* Logo */}
         <div className="text-center mb-8">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center">
-            <span className="text-3xl font-bold text-white">C</span>
+          <div className="w-20 h-20 mx-auto mb-4 rounded-3xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-2xl shadow-purple-900/50">
+            <span className="text-4xl font-black text-white">C</span>
           </div>
-          <h1 className="text-2xl font-bold text-white">CW-MC Launcher</h1>
-          <p className="text-gray-400 text-sm mt-1">Inicia sesión para comenzar</p>
+          <h1 className="text-3xl font-extrabold tracking-tight bg-gradient-to-r from-purple-300 via-pink-300 to-purple-200 bg-clip-text text-transparent">
+            CW-MC Launcher
+          </h1>
+          <p className="text-gray-500 text-sm mt-1.5">Inicia sesión para comenzar</p>
         </div>
 
-        <div className="bg-gray-800 border border-gray-700 rounded-2xl p-6 space-y-3">
+        {/* Card */}
+        <div className="bg-gradient-to-br from-gray-800/90 via-purple-950/10 to-gray-900 border border-purple-500/30 rounded-2xl p-6 space-y-3 shadow-xl">
           {error && (
             <div className="flex items-start gap-2 p-3 bg-red-500/10 border border-red-500/20 rounded-xl">
               <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
@@ -71,16 +82,16 @@ export default function AuthPage({ onLogin }: Props) {
 
               <div className="relative">
                 <div className="absolute inset-0 flex items-center">
-                  <div className="w-full border-t border-gray-700" />
+                  <div className="w-full border-t border-gray-700/60" />
                 </div>
                 <div className="relative flex justify-center">
-                  <span className="bg-gray-800 px-3 text-xs text-gray-500">o</span>
+                  <span className="bg-gray-800/90 px-3 text-xs text-gray-500">o</span>
                 </div>
               </div>
 
               <button
                 onClick={() => setMode('offline')}
-                className="w-full flex items-center justify-center gap-3 py-3 bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-xl font-medium transition-colors"
+                className="w-full flex items-center justify-center gap-3 py-3 border border-purple-500/30 text-purple-300 hover:bg-purple-500/10 hover:border-purple-400/50 rounded-xl font-medium transition-all"
               >
                 <User size={18} />
                 Modo offline (sin cuenta)
@@ -92,7 +103,7 @@ export default function AuthPage({ onLogin }: Props) {
             <>
               <button
                 onClick={() => setMode('choose')}
-                className="text-gray-500 hover:text-gray-300 text-sm transition-colors"
+                className="flex items-center gap-1.5 text-purple-400 hover:text-purple-300 text-sm transition-colors"
               >
                 ← Volver
               </button>
@@ -108,7 +119,7 @@ export default function AuthPage({ onLogin }: Props) {
                   onKeyDown={(e) => e.key === 'Enter' && handleOffline()}
                   placeholder="Steve"
                   maxLength={16}
-                  className="w-full bg-gray-700 border border-gray-600 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 transition-colors"
+                  className="w-full bg-gray-800/80 border border-gray-700/80 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
                   autoFocus
                 />
                 <p className="text-xs text-gray-600 mt-1">Solo puede entrar a servidores en modo offline</p>
@@ -116,9 +127,14 @@ export default function AuthPage({ onLogin }: Props) {
               <button
                 onClick={handleOffline}
                 disabled={loading || !username.trim()}
-                className="w-full py-3 bg-purple-600 hover:bg-purple-500 disabled:opacity-50 text-white rounded-xl font-medium transition-colors"
+                className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-all hover:scale-[1.02] active:scale-95 shadow-md shadow-purple-900/25"
               >
-                {loading ? 'Entrando...' : 'Entrar'}
+                {loading ? (
+                  <>
+                    <span className="w-4 h-4 rounded-full border-2 border-t-transparent border-white animate-spin" />
+                    Entrando...
+                  </>
+                ) : 'Entrar'}
               </button>
             </>
           )}
