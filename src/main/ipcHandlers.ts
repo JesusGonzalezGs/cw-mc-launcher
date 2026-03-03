@@ -146,7 +146,7 @@ export function registerIpcHandlers(): void {
     return { ok: true }
   })
 
-  ipcMain.handle('instances:clone', async (_, id: string) => cloneInstance(id))
+  ipcMain.handle('instances:clone', async (_, id: string, customName?: string) => cloneInstance(id, customName))
 
   ipcMain.handle('instances:isRunning', (_, id: string) => isInstanceRunning(id))
 

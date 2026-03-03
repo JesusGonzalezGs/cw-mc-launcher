@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Download, Loader2, PackageSearch, Tag, Layers, LayoutGrid, ArrowUpDown, BookOpen } from 'lucide-react'
 import { LOADER_TYPE_MAP, MC_RELEASE_VERSIONS } from '../constants'
+import FilterSelect from '../components/common/FilterSelect'
 import type { CfMod } from '../types'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -148,7 +149,7 @@ export default function CatalogPage() {
             <BookOpen size={11} />
             CurseForge
           </div>
-          <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">
+          <h1 className="text-3xl pb-4 sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r from-purple-400 to-pink-400 bg-clip-text text-transparent mb-2">
             Catálogo de Modpacks
           </h1>
           {!loading && totalCount > 0 && (
@@ -174,28 +175,47 @@ export default function CatalogPage() {
           </div>
 
           {/* Version */}
-          <FilterSelect icon={<Tag size={13} />} value={mcFilter} onChange={setMcFilter}>
-            <option value="">Todas las versiones</option>
-            {MC_RELEASE_VERSIONS.map((v) => <option key={v} value={v}>{v}</option>)}
-          </FilterSelect>
+          <FilterSelect
+            icon={Tag}
+            value={mcFilter}
+            onChange={setMcFilter}
+            placeholder="Todas las versiones"
+            options={[
+              { value: '', label: 'Todas las versiones' },
+              ...MC_RELEASE_VERSIONS.map((v) => ({ value: v, label: v })),
+            ]}
+          />
 
           {/* Loader */}
-          <FilterSelect icon={<Layers size={13} />} value={loaderFilter} onChange={setLoaderFilter}>
-            {LOADER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </FilterSelect>
+          <FilterSelect
+            icon={Layers}
+            value={loaderFilter}
+            onChange={setLoaderFilter}
+            placeholder="Todos los loaders"
+            options={LOADER_OPTIONS}
+          />
 
           {/* Category */}
           {categories.length > 0 && (
-            <FilterSelect icon={<LayoutGrid size={13} />} value={categoryId} onChange={setCategoryId}>
-              <option value="">Todas las categorías</option>
-              {categories.map((c) => <option key={c.id} value={String(c.id)}>{c.name}</option>)}
-            </FilterSelect>
+            <FilterSelect
+              icon={LayoutGrid}
+              value={categoryId}
+              onChange={setCategoryId}
+              placeholder="Todas las categorías"
+              options={[
+                { value: '', label: 'Todas las categorías' },
+                ...categories.map((c) => ({ value: String(c.id), label: c.name })),
+              ]}
+            />
           )}
 
           {/* Sort */}
-          <FilterSelect icon={<ArrowUpDown size={13} />} value={sortOption} onChange={setSortOption}>
-            {SORT_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </FilterSelect>
+          <FilterSelect
+            icon={ArrowUpDown}
+            value={sortOption}
+            onChange={setSortOption}
+            options={SORT_OPTIONS}
+          />
         </div>
 
         {/* Error */}
@@ -367,32 +387,3 @@ function ModpackCard({ mod, onClick }: { mod: CfMod; onClick: () => void }) {
   )
 }
 
-// ── FilterSelect ──────────────────────────────────────────────────────────────
-
-function FilterSelect({
-  icon,
-  value,
-  onChange,
-  children,
-}: {
-  icon: React.ReactNode
-  value: string
-  onChange: (v: string) => void
-  children: React.ReactNode
-}) {
-  return (
-    <div className="relative flex items-center">
-      <span className="absolute left-2.5 text-gray-400 pointer-events-none">{icon}</span>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="appearance-none bg-gray-800/80 border border-gray-700/80 rounded-xl pl-8 pr-7 py-2 text-gray-300 text-sm focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all cursor-pointer"
-      >
-        {children}
-      </select>
-      <svg className="absolute right-2.5 w-3 h-3 text-gray-500 pointer-events-none" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M2 4l4 4 4-4" />
-      </svg>
-    </div>
-  )
-}

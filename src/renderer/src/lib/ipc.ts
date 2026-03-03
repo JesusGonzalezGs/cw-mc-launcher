@@ -29,7 +29,7 @@ declare global {
         get: (id: string) => Promise<any>
         create: (params: any) => Promise<any>
         delete: (id: string) => Promise<any>
-        clone: (id: string) => Promise<any>
+        clone: (id: string, customName?: string) => Promise<any>
         isRunning: (id: string) => Promise<boolean>
         stop: (id: string) => Promise<any>
         launch: (instance: any) => Promise<any>

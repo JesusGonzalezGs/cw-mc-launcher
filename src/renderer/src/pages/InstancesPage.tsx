@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, AlertCircle, Trash2, Gamepad2, Layers, PackageOpen, Loader2 } from 'lucide-react'
+import { Plus, AlertCircle, Trash2, Gamepad2, Layers, PackageOpen, Loader2, Copy } from 'lucide-react'
 import InstanceCard from '../components/InstanceCard'
 import Modal from '../components/common/Modal'
 import type { Instance } from '../types'
@@ -33,6 +33,9 @@ export default function InstancesPage() {
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set())
   const [error, setError] = useState('')
   const [pendingDelete, setPendingDelete] = useState<Instance | null>(null)
+  const [pendingClone, setPendingClone] = useState<Instance | null>(null)
+  const [cloneName, setCloneName] = useState('')
+  const [cloneNameError, setCloneNameError] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -104,10 +107,26 @@ export default function InstancesPage() {
     load()
   }
 
-  async function handleClone(instance: Instance) {
+  function openCloneModal(instance: Instance) {
+    setCloneName(`${instance.name} (Copia)`)
+    setCloneNameError('')
+    setPendingClone(instance)
+  }
+
+  async function confirmClone() {
+    if (!pendingClone || !cloneName.trim()) return
+    try {
+      const existing = await window.launcher.instances.list()
+      if (existing.some((i: any) => i.name.toLowerCase() === cloneName.trim().toLowerCase())) {
+        setCloneNameError('Ya existe una instancia con ese nombre')
+        return
+      }
+    } catch { /* continue */ }
+    const inst = pendingClone
+    setPendingClone(null)
     setError('')
     try {
-      await window.launcher.instances.clone(instance.id)
+      await window.launcher.instances.clone(inst.id, cloneName.trim())
       load()
     } catch (e: any) {
       setError(e.message)
@@ -129,23 +148,71 @@ export default function InstancesPage() {
         onClose={() => setPendingDelete(null)}
         title="Eliminar instancia"
         maxWidth="max-w-sm"
+        icon={Trash2}
+        iconBg="bg-red-500/15"
+        iconColor="text-red-400"
       >
-        <p className="text-gray-300 text-sm mb-5">
-          ¿Eliminar la instancia <span className="font-semibold text-white">"{pendingDelete?.name}"</span>? Esta acción es irreversible.
+        <p className="text-sm text-gray-400">
+          ¿Eliminar <span className="font-semibold text-white">"{pendingDelete?.name}"</span>? Esta acción es irreversible.
         </p>
-        <div className="flex gap-3 justify-end">
+        <div className="flex justify-end gap-2 -mx-5 px-5 pt-4 mt-4 border-t border-gray-700/60">
           <button
             onClick={() => setPendingDelete(null)}
-            className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+            className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
           >
             Cancelar
           </button>
           <button
             onClick={confirmDelete}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-red-600 hover:bg-red-500 text-white rounded-xl transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-red-600 hover:bg-red-500 text-white transition-colors"
           >
             <Trash2 size={14} />
             Eliminar
+          </button>
+        </div>
+      </Modal>
+
+      {/* Clone modal */}
+      <Modal
+        open={!!pendingClone}
+        onClose={() => setPendingClone(null)}
+        title="Clonar instancia"
+        maxWidth="max-w-sm"
+        icon={Copy}
+        iconBg="bg-purple-500/15"
+        iconColor="text-purple-400"
+      >
+        <p className="text-sm text-gray-400 mb-3">
+          Elige un nombre para la copia de <span className="font-semibold text-white">"{pendingClone?.name}"</span>.
+        </p>
+        <input
+          type="text"
+          value={cloneName}
+          onChange={(e) => { setCloneName(e.target.value); setCloneNameError('') }}
+          onKeyDown={(e) => e.key === 'Enter' && confirmClone()}
+          placeholder="Nombre de la copia"
+          autoFocus
+          className="w-full px-3 py-2 rounded-xl text-sm border bg-gray-950 border-gray-700 text-gray-200 placeholder-gray-500 focus:outline-none focus:border-purple-500/60 transition-colors"
+        />
+        {cloneNameError && (
+          <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mt-2">
+            {cloneNameError}
+          </p>
+        )}
+        <div className="flex justify-end gap-2 -mx-5 px-5 pt-4 mt-4 border-t border-gray-700/60">
+          <button
+            onClick={() => setPendingClone(null)}
+            className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={confirmClone}
+            disabled={!cloneName.trim()}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Copy size={14} />
+            Clonar
           </button>
         </div>
       </Modal>
@@ -244,7 +311,7 @@ export default function InstancesPage() {
                 onPlay={() => handlePlay(inst)}
                 onStop={() => handleStop(inst)}
                 onDelete={() => setPendingDelete(inst)}
-                onClone={() => handleClone(inst)}
+                onClone={() => openCloneModal(inst)}
               />
             ))}
           </div>

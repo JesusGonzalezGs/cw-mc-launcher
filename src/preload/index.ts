@@ -41,7 +41,7 @@ contextBridge.exposeInMainWorld('launcher', {
     get: (id: string) => ipcRenderer.invoke('instances:get', id),
     create: (params: any) => ipcRenderer.invoke('instances:create', params),
     delete: (id: string) => ipcRenderer.invoke('instances:delete', id),
-    clone: (id: string) => ipcRenderer.invoke('instances:clone', id),
+    clone: (id: string, customName?: string) => ipcRenderer.invoke('instances:clone', id, customName),
     isRunning: (id: string) => ipcRenderer.invoke('instances:isRunning', id),
     stop: (id: string) => ipcRenderer.invoke('instances:stop', id),
     launch: (instance: any) => ipcRenderer.invoke('instances:launch', instance),

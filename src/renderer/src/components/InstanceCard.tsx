@@ -96,10 +96,10 @@ export default function InstanceCard({ instance, isRunning, onPlay, onStop, onDe
         </button>
 
         {menuOpen && (
-          <div className="absolute right-0 top-full mt-1 w-36 rounded-xl border bg-gray-900/95 border-purple-500/20 shadow-xl shadow-black/30 backdrop-blur-sm overflow-hidden">
+          <div className="absolute right-0 top-full mt-1 w-36 rounded-xl border bg-gray-800 border-gray-700/60 shadow-2xl shadow-black/50 overflow-hidden">
             <button
               onClick={() => { setMenuOpen(false); onClone() }}
-              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-purple-500/10 transition-colors"
+              className="w-full flex items-center gap-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-700/60 transition-colors"
             >
               <Copy size={13} />
               Clonar

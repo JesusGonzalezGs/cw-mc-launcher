@@ -49,13 +49,12 @@ export default function ModpackDetailPage() {
   const { modpackId } = useParams<{ modpackId: string }>()
   const navigate = useNavigate()
   const { startInstall, finishInstall, installing: activeInstalls } = useInstall()
-  const isAnyInstalling = activeInstalls.length > 0
   const [mod, setMod] = useState<CfMod | null>(null)
   const [description, setDescription] = useState('')
   const [files, setFiles] = useState<CfFile[]>([])
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
-  const [installing, setInstalling] = useState(false)
+  const isFileInstalling = (fileId: number) => activeInstalls.some((i) => i.fileId === fileId)
   const [progress, setProgress] = useState<InstallProgress | null>(null)
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
@@ -95,7 +94,7 @@ export default function ModpackDetailPage() {
   }, [])
 
   function openInstallModal(fileId: number) {
-    if (isAnyInstalling || installedFileIds.has(fileId)) return
+    if (installedFileIds.has(fileId)) return
     const defaultName = files.find((f) => f.id === fileId)?.displayName ?? mod?.name ?? ''
     setModalName(defaultName)
     setModalNameError('')
@@ -119,11 +118,10 @@ export default function ModpackDetailPage() {
   async function handleInstall(fileId: number, customName: string) {
     if (!mod) return
     if (installedFileIds.has(fileId)) return
-    const installId = `cf-${mod.id}`
-    setInstalling(true)
+    const installId = `cf-${mod.id}-${fileId}`
     setError('')
     setDone(false)
-    startInstall(installId, customName)
+    startInstall(installId, customName, fileId)
     try {
       const fileVersion = files.find((f) => f.id === fileId)?.displayName ?? undefined
       await window.launcher.cf.installModpack(mod.id, fileId, customName, mod.logo?.url, fileVersion)
@@ -132,7 +130,6 @@ export default function ModpackDetailPage() {
       setTimeout(() => navigate('/instances'), 2000)
     } catch (e: any) {
       setError(e.message ?? 'Error al instalar el modpack')
-      setInstalling(false)
       finishInstall(installId)
     }
   }
@@ -279,7 +276,7 @@ export default function ModpackDetailPage() {
 
               {/* Install action */}
               <div className="flex flex-col gap-2">
-                {!installing && !done && !isAnyInstalling && !isSelectedInstalled && (
+                {(selectedFileId === null || !isFileInstalling(selectedFileId)) && !done && !isSelectedInstalled && (
                   <button
                     onClick={() => selectedFileId && openInstallModal(selectedFileId)}
                     disabled={!selectedFileId}
@@ -290,21 +287,14 @@ export default function ModpackDetailPage() {
                   </button>
                 )}
 
-                {!installing && !done && isSelectedInstalled && (
+                {(selectedFileId === null || !isFileInstalling(selectedFileId)) && !done && isSelectedInstalled && (
                   <div className="self-start flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/10 border border-green-500/25">
                     <Check size={15} className="text-green-400" />
                     <span className="text-green-400 text-sm font-medium">Esta versión ya está instalada</span>
                   </div>
                 )}
 
-                {!installing && !done && isAnyInstalling && !isSelectedInstalled && (
-                  <div className="self-start flex items-center gap-2 px-4 py-2.5 rounded-xl bg-yellow-500/10 border border-yellow-500/25">
-                    <Loader2 size={15} className="text-yellow-400 animate-spin shrink-0" />
-                    <span className="text-yellow-300 text-sm font-medium">Instalación en progreso, espera...</span>
-                  </div>
-                )}
-
-                {installing && progress && !done && (
+                {selectedFileId !== null && isFileInstalling(selectedFileId) && progress && !done && (
                   <div className="max-w-xs">
                     <ProgressBar percent={progress.percent} label={progress.stage} />
                   </div>
@@ -442,11 +432,11 @@ export default function ModpackDetailPage() {
                           ) : (
                             <button
                               onClick={() => openInstallModal(file.id)}
-                              disabled={installing || isAnyInstalling}
+                              disabled={isFileInstalling(file.id)}
                               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-sm"
                             >
-                              {isAnyInstalling ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
-                              Instalar
+                              {isFileInstalling(file.id) ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                              {isFileInstalling(file.id) ? 'Instalando...' : 'Instalar'}
                             </button>
                           )}
                         </td>
@@ -469,6 +459,9 @@ export default function ModpackDetailPage() {
         onClose={() => setInstallModal(null)}
         title="Nombre de la instancia"
         maxWidth="max-w-sm"
+        icon={Download}
+        iconBg="bg-purple-500/15"
+        iconColor="text-purple-400"
       >
         <p className="text-sm text-gray-400 mb-3">
           Elige un nombre para esta instancia. Puedes editarlo para distinguir versiones.
@@ -480,25 +473,24 @@ export default function ModpackDetailPage() {
           onKeyDown={(e) => e.key === 'Enter' && confirmInstall()}
           placeholder="Nombre de la instancia"
           autoFocus
-          className="w-full bg-gray-800/80 border border-gray-700/80 rounded-xl px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all mb-1"
+          className="w-full px-3 py-2 rounded-xl text-sm border bg-gray-950 border-gray-700 text-gray-200 placeholder-gray-500 focus:outline-none focus:border-purple-500/60 transition-colors"
         />
         {modalNameError && (
-          <p className="text-red-400 text-xs mb-3 flex items-center gap-1">
-            <AlertCircle size={12} />
+          <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mt-2">
             {modalNameError}
           </p>
         )}
-        <div className="flex gap-3 justify-end mt-4">
+        <div className="flex justify-end gap-2 -mx-5 px-5 pt-4 mt-4 border-t border-gray-700/60">
           <button
             onClick={() => setInstallModal(null)}
-            className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors"
+            className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
           >
             Cancelar
           </button>
           <button
             onClick={confirmInstall}
             disabled={!modalName.trim()}
-            className="flex items-center gap-2 px-4 py-2 text-sm bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Download size={14} />
             Instalar

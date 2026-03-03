@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, ChevronDown, Loader2, AlertCircle, Plus } from 'lucide-react'
+import { ArrowLeft, Loader2, AlertCircle, Plus } from 'lucide-react'
 import ProgressBar from '../components/ProgressBar'
+import FilterSelect from '../components/common/FilterSelect'
 import type { ModLoader, McVersion } from '../types'
 import { LOADER_NAMES } from '../constants'
 import { useInstall } from '../context/InstallContext'
@@ -15,7 +16,6 @@ interface DownloadProgress {
 }
 
 const INPUT_CLASS = 'w-full bg-gray-800/80 border border-gray-700/80 rounded-xl px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all disabled:opacity-50'
-const SELECT_CLASS = 'w-full appearance-none bg-gray-800/80 border border-gray-700/80 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all disabled:opacity-50'
 
 export default function NewInstancePage() {
   const navigate = useNavigate()
@@ -285,21 +285,16 @@ export default function NewInstancePage() {
                 Cargando versiones de Mojang...
               </div>
             ) : (
-              <div className="relative">
-                <select
-                  value={mcVersion}
-                  onChange={(e) => setMcVersion(e.target.value)}
-                  disabled={creating}
-                  className={SELECT_CLASS}
-                >
-                  {filteredVersions.map((v) => (
-                    <option key={v.id} value={v.id}>
-                      {v.id}{v.type !== 'release' ? ` (${v.type})` : ''}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-              </div>
+              <FilterSelect
+                fullWidth
+                disabled={creating}
+                value={mcVersion}
+                onChange={setMcVersion}
+                options={filteredVersions.map((v) => ({
+                  value: v.id,
+                  label: `${v.id}${v.type !== 'release' ? ` (${v.type})` : ''}`,
+                }))}
+              />
             )}
           </div>
 
@@ -308,19 +303,16 @@ export default function NewInstancePage() {
             <>
               <div>
                 <label className="block text-sm text-gray-400 mb-1.5">Mod loader</label>
-                <div className="relative">
-                  <select
-                    value={loader}
-                    onChange={(e) => setLoader(e.target.value as ModLoader)}
-                    disabled={creating}
-                    className={SELECT_CLASS}
-                  >
-                    {(['fabric', 'quilt', 'forge', 'neoforge'] as ModLoader[]).map((l) => (
-                      <option key={l} value={l}>{LOADER_NAMES[l]}</option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-                </div>
+                <FilterSelect
+                  fullWidth
+                  disabled={creating}
+                  value={loader}
+                  onChange={(v) => setLoader(v as ModLoader)}
+                  options={(['fabric', 'quilt', 'forge', 'neoforge'] as ModLoader[]).map((l) => ({
+                    value: l,
+                    label: LOADER_NAMES[l],
+                  }))}
+                />
               </div>
 
               <div>
@@ -337,21 +329,16 @@ export default function NewInstancePage() {
                     No hay versiones de {LOADER_NAMES[loader]} para Minecraft {mcVersion}
                   </p>
                 ) : (
-                  <div className="relative">
-                    <select
-                      value={loaderVersion}
-                      onChange={(e) => setLoaderVersion(e.target.value)}
-                      disabled={creating}
-                      className={SELECT_CLASS}
-                    >
-                      {loaderVersions.map((v) => (
-                        <option key={v.id} value={v.id}>
-                          {v.id}{!v.stable ? ' (unstable)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                    <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 pointer-events-none" />
-                  </div>
+                  <FilterSelect
+                    fullWidth
+                    disabled={creating}
+                    value={loaderVersion}
+                    onChange={setLoaderVersion}
+                    options={loaderVersions.map((v) => ({
+                      value: v.id,
+                      label: `${v.id}${!v.stable ? ' (unstable)' : ''}`,
+                    }))}
+                  />
                 )}
               </div>
             </>

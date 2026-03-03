@@ -3,11 +3,12 @@ import React, { createContext, useContext, useState, useCallback } from 'react'
 export interface InstallingItem {
   id: string
   name: string
+  fileId?: number
 }
 
 interface InstallContextValue {
   installing: InstallingItem[]
-  startInstall: (id: string, name: string) => void
+  startInstall: (id: string, name: string, fileId?: number) => void
   finishInstall: (id: string) => void
 }
 
@@ -20,8 +21,8 @@ const InstallContext = createContext<InstallContextValue>({
 export function InstallProvider({ children }: { children: React.ReactNode }) {
   const [installing, setInstalling] = useState<InstallingItem[]>([])
 
-  const startInstall = useCallback((id: string, name: string) => {
-    setInstalling((prev) => [...prev, { id, name }])
+  const startInstall = useCallback((id: string, name: string, fileId?: number) => {
+    setInstalling((prev) => [...prev, { id, name, fileId }])
   }, [])
 
   const finishInstall = useCallback((id: string) => {
