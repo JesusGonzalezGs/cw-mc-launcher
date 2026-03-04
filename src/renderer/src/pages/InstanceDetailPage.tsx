@@ -316,6 +316,26 @@ export default function InstanceDetailPage() {
 
        
       </div>
+      {/* Java warning */}
+      {javaInfo && !javaInfo.ready && javaInfo.status !== 'downloading' && (
+        <div className="max-w-7xl mx-auto w-full px-5 mt-3">
+          <div className="flex items-center justify-between gap-3 px-4 py-2.5 rounded-xl bg-yellow-500/10 border border-yellow-500/25">
+            <div className="flex items-center gap-2 min-w-0">
+              <AlertCircle size={14} className="text-yellow-400 shrink-0" />
+              <p className="text-xs text-yellow-300 truncate">
+                Java {javaInfo.version} no está instalado — el juego probablemente no arrancará sin él.
+              </p>
+            </div>
+            <button
+              onClick={() => setTab('settings')}
+              className="shrink-0 text-xs font-semibold text-yellow-400 hover:text-yellow-300 underline underline-offset-2 transition-colors"
+            >
+              Instalar en la pestaña Ajustes →
+            </button>
+          </div>
+        </div>
+      )}
+
        {/* Tabs */}
         <div className="max-w-7xl mx-auto w-full px-5 mb-4 mt-2 pt-3">
         <div className="flex gap-1 p-1 rounded-2xl border bg-gray-800/60 border-gray-700/60" role="tablist">

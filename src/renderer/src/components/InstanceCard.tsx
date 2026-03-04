@@ -41,11 +41,11 @@ export default function InstanceCard({ instance, isRunning, onPlay, onStop, onDe
   }, [menuOpen])
 
   return (
-    <div className="rounded-2xl border flex flex-col shadow-md hover:shadow-xl hover:-translate-y-0.5 bg-gradient-to-br from-gray-800/90 via-purple-950/10 to-gray-900 border-purple-500/25 hover:border-purple-400/50 transition-all relative">
+    <div className="rounded-2xl border flex flex-col shadow-md hover:shadow-xl hover:-translate-y-0.5 bg-gradient-to-br from-gray-800/90 via-purple-950/10 to-gray-900 border-purple-500/25 hover:border-purple-400/50 transition-all relative h-48">
 
       {/* Banner — clickable to open detail */}
       <div
-        className="h-28 relative overflow-hidden flex-shrink-0 rounded-t-2xl cursor-pointer"
+        className="h-36 relative overflow-hidden flex-shrink-0 rounded-t-2xl cursor-pointer"
         onClick={() => navigate(`/instances/${instance.id}`)}
       >
         {logo && (
@@ -56,7 +56,7 @@ export default function InstanceCard({ instance, isRunning, onPlay, onStop, onDe
             onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
           />
         )}
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-900/70 via-indigo-900/40 to-pink-900/60" />
+        {!logo && <div className="absolute inset-0 bg-gradient-to-br from-purple-900/70 via-indigo-900/40 to-pink-900/60" />}
         <div className="absolute inset-0 bg-gradient-to-t from-gray-900/85 to-transparent" />
 
         {/* Running badge */}
@@ -116,7 +116,7 @@ export default function InstanceCard({ instance, isRunning, onPlay, onStop, onDe
       </div>
 
       {/* Actions */}
-      <div className="p-2.5">
+      <div className="px-2.5 flex-1 flex flex-col justify-center">
         {isRunning ? (
           <button
             onClick={onStop}

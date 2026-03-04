@@ -8,20 +8,19 @@ import { useInstall } from '../context/InstallContext'
 
 function InstallingCard({ name, percent, stage }: { name: string; percent: number; stage: string }) {
   return (
-    <div className="rounded-2xl border border-purple-500/30 overflow-hidden flex flex-col shadow-md bg-gradient-to-br from-gray-800/90 via-purple-950/10 to-gray-900">
-      <div className="h-28 relative bg-gradient-to-br from-purple-900/50 via-indigo-900/40 to-pink-900/50 flex items-center justify-center">
+    <div className="rounded-2xl border border-purple-500/30 overflow-hidden flex flex-col shadow-md bg-gradient-to-br from-gray-800/90 via-purple-950/10 to-gray-900 h-48">
+      <div className="h-36 relative bg-gradient-to-br from-purple-900/50 via-indigo-900/40 to-pink-900/50 flex items-center justify-center">
         <Loader2 size={28} className="text-purple-400 animate-spin opacity-70" />
       </div>
-      <div className="p-3 flex-1">
-        <p className="text-sm font-semibold text-gray-200 truncate mb-2">{name}</p>
-        <p className="text-xs text-gray-500 truncate mb-2">{stage || 'Preparando...'}</p>
+      <div className="p-2.5 flex-1 flex flex-col justify-end gap-1.5">
+        <p className="text-sm font-semibold text-gray-200 truncate">{name}</p>
+        <p className="text-xs text-gray-500 truncate">{stage || 'Preparando...'}</p>
         <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
           <div
             className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-300"
             style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
           />
         </div>
-        <p className="text-xs text-gray-600 text-right mt-1">{percent}%</p>
       </div>
     </div>
   )
