@@ -57,6 +57,7 @@ contextBridge.exposeInMainWorld('launcher', {
       ipcRenderer.invoke('instances:installModWithDeps', instanceId, modId, fileId),
     identifyMods: (instanceId: string) =>
       ipcRenderer.invoke('instances:identifyMods', instanceId),
+    openFolder: (id: string) => ipcRenderer.invoke('instances:openFolder', id),
   },
 
   // ── Minecraft ────────────────────────────────────────────────────────────────

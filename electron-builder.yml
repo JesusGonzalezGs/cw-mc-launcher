@@ -8,8 +8,8 @@ files:
   - node_modules/**/*
   - package.json
 win:
-  target: nsis
-  icon: resources/icon.ico
+  target: portable
+  icon: resources/icon.png
 mac:
   target: dmg
   icon: resources/icon.png

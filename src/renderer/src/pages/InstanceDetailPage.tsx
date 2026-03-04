@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Play, Square, Package, Terminal, Settings2, Trash2,
   Save, CheckCircle, Download, Loader2, Plus, RefreshCw,
-  Search, AlertCircle, X, HelpCircle,
+  Search, AlertCircle, X, HelpCircle, FolderOpen,
 } from 'lucide-react'
 import type { Instance } from '../types'
 import { LOADER_NAMES } from '../constants'
@@ -356,13 +356,23 @@ export default function InstanceDetailPage() {
                     </span>
                   )}
                 </div>
-                <button
-                  onClick={() => setShowCatalog(true)}
-                  className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-purple-200 transition-colors"
-                >
-                  <Plus size={12} />
-                  Catálogo
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    onClick={() => window.launcher.instances.openFolder(id!)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-700/60 hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors"
+                    title="Abrir carpeta de la instancia"
+                  >
+                    <FolderOpen size={12} />
+                    Carpeta
+                  </button>
+                  <button
+                    onClick={() => setShowCatalog(true)}
+                    className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-purple-200 transition-colors"
+                  >
+                    <Plus size={12} />
+                    Catálogo
+                  </button>
+                </div>
               </div>
 
               {/* Search */}

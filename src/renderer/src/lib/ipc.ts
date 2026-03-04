@@ -41,6 +41,7 @@ declare global {
         installMod: (instanceId: string, modId: number, fileId: number) => Promise<any>
         installModWithDeps: (instanceId: string, modId: number, fileId: number) => Promise<any>
         identifyMods: (instanceId: string) => Promise<any>
+        openFolder: (id: string) => Promise<void>
       }
       mc: {
         getVersionManifest: () => Promise<any>

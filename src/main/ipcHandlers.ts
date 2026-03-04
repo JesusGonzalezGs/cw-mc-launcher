@@ -1,7 +1,7 @@
 /**
  * Registro de todos los handlers IPC del proceso main.
  */
-import { ipcMain, app } from 'electron'
+import { ipcMain, app, shell } from 'electron'
 import { getMainWindow } from './index'
 import {
   downloadJava,
@@ -317,4 +317,6 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('app:getVersion', () => app.getVersion())
+
+  ipcMain.handle('instances:openFolder', (_, id: string) => shell.openPath(getInstanceDir(id)))
 }
