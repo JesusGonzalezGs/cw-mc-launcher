@@ -20,6 +20,7 @@ interface ModMeta {
   summary?: string
   gameVersions: string[]
   recognized?: boolean
+  deps?: number[]
 }
 
 const LOADER_BADGE_COLORS: Record<string, string> = {
@@ -140,7 +141,39 @@ export default function InstanceDetailPage() {
     if (!id || togglingMod) return
     setTogglingMod(filename)
     try {
+      const isCurrentlyEnabled = !filename.endsWith('.jar.disabled')
       await window.launcher.instances.toggleMod(id, filename)
+
+      // Cascade disable: if we just disabled a mod, also disable any enabled mods
+      // that list it as a dependency (BFS for transitive dependents)
+      if (isCurrentlyEnabled) {
+        const cleanName = filename.replace('.jar.disabled', '.jar')
+        const meta = modsMeta[cleanName] ?? modsMeta[filename]
+        const disabledModId = meta?.modId
+
+        if (disabledModId && disabledModId > 0) {
+          const queue = [disabledModId]
+          const visited = new Set<number>([disabledModId])
+
+          while (queue.length > 0) {
+            const currentModId = queue.shift()!
+            for (const [metaKey, m] of Object.entries(modsMeta)) {
+              if (!m.deps?.includes(currentModId)) continue
+              if (visited.has(m.modId)) continue
+              const enabledFile = mods.find(
+                (f) => !f.endsWith('.jar.disabled') &&
+                  (f === metaKey || f.replace('.jar.disabled', '.jar') === metaKey)
+              )
+              if (enabledFile) {
+                await window.launcher.instances.toggleMod(id, enabledFile)
+                visited.add(m.modId)
+                queue.push(m.modId)
+              }
+            }
+          }
+        }
+      }
+
       await refreshMods()
     } finally {
       setTogglingMod(null)
@@ -221,7 +254,7 @@ export default function InstanceDetailPage() {
             <div className="flex items-start gap-3 min-w-0">
               <button
                 onClick={() => navigate('/instances')}
-                className="shrink-0 mt-0.5 p-2 rounded-xl border border-white/10 text-gray-400 hover:text-white hover:bg-white/8 hover:border-white/20 transition-all"
+                className="shrink-0 mt-0.5 p-2 rounded-xl border border-purple-500/30 text-purple-300 hover:bg-purple-500/10 hover:border-purple-400/50 transition-all"
               >
                 <ArrowLeft size={15} />
               </button>
@@ -539,7 +572,7 @@ export default function InstanceDetailPage() {
                       </div>
                       <div className="w-full h-1 rounded-full bg-gray-700/60">
                         <div
-                          className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-300"
+                          className="h-full rounded-full bg-gradient-to-r from-purple-600 to-pink-600 transition-all duration-300"
                           style={{ width: `${javaInfo.progress}%` }}
                         />
                       </div>
@@ -547,7 +580,7 @@ export default function InstanceDetailPage() {
                   ) : (
                     <button
                       onClick={handleInstallJava}
-                      className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/25 text-indigo-300 hover:text-indigo-200 text-sm font-medium transition-colors"
+                      className="flex items-center justify-center gap-2 w-full px-3 py-2.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white text-sm font-medium transition-all hover:scale-[1.02] active:scale-95 shadow-sm shadow-purple-900/25"
                     >
                       <Download size={13} />
                       Instalar Java {javaInfo.version}
@@ -609,7 +642,7 @@ export default function InstanceDetailPage() {
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" onClick={() => setModToDelete(null)} />
           <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none px-4">
             <div
-              className="w-full max-w-sm rounded-2xl shadow-2xl border pointer-events-auto bg-gradient-to-br from-gray-800 to-gray-900 border-red-500/30"
+              className="w-full max-w-sm rounded-2xl shadow-2xl border pointer-events-auto bg-gradient-to-br from-gray-900 via-purple-950/20 to-[#0a0a14] border-red-500/30"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700/60">

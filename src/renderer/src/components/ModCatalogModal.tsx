@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import {
   X, Search, Package, Download, RefreshCw,
   ChevronLeft, ChevronRight, Tag, Layers, ArrowUpDown,
@@ -9,6 +9,19 @@ import type { Instance } from '../types'
 const LOADER_NAMES: Record<number, string> = { 1: 'Forge', 4: 'Fabric', 5: 'Quilt', 6: 'NeoForge' }
 const KNOWN_LOADER_NAMES = new Set(['Forge', 'Fabric', 'Quilt', 'NeoForge'])
 const LOADER_NUM: Record<string, number> = { forge: 1, fabric: 4, quilt: 5, neoforge: 6 }
+
+const LOADER_COLORS: Record<number, string> = {
+  1: 'bg-orange-500/15 text-orange-300 border-orange-500/25',
+  4: 'bg-blue-500/15 text-blue-300 border-blue-500/25',
+  5: 'bg-purple-500/15 text-purple-300 border-purple-500/25',
+  6: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25',
+}
+const LOADER_NAME_COLORS: Record<string, string> = {
+  Forge:    'bg-orange-500/15 text-orange-300 border-orange-500/25',
+  Fabric:   'bg-blue-500/15 text-blue-300 border-blue-500/25',
+  Quilt:    'bg-purple-500/15 text-purple-300 border-purple-500/25',
+  NeoForge: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25',
+}
 
 const SORT_OPTIONS = [
   { value: '2', label: 'Popularidad' },
@@ -138,7 +151,7 @@ function ModCard({ mod, installing, installed, error, onInstall, onDetail, versi
   return (
     <div
       onClick={onDetail}
-      className="rounded-2xl border flex flex-col transition-all cursor-pointer bg-gray-800/60 border-gray-700/40 hover:border-purple-500/50 hover:bg-gray-800/80"
+      className="rounded-2xl border flex flex-col transition-all cursor-pointer bg-gradient-to-br from-gray-700 via-purple-900/20 to-gray-800 border-purple-500/25 hover:border-purple-500/50 hover:shadow-lg hover:shadow-purple-900/20 hover:-translate-y-0.5"
     >
       <div className="p-3 flex items-start gap-3 flex-1">
         {mod.logo?.thumbnailUrl ? (
@@ -158,7 +171,7 @@ function ModCard({ mod, installing, installed, error, onInstall, onDetail, versi
           {availableLoaders.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">
               {availableLoaders.slice(0, 3).map(l => LOADER_NAMES[l] && (
-                <span key={l} className="text-[10px] px-1.5 py-px rounded-full font-medium border bg-gray-700/60 border-gray-600/60 text-gray-400">
+                <span key={l} className={`text-[10px] px-1.5 py-px rounded-full font-medium border ${LOADER_COLORS[l] ?? 'bg-gray-700/60 border-gray-600/60 text-gray-400'}`}>
                   {LOADER_NAMES[l]}
                 </span>
               ))}
@@ -168,7 +181,7 @@ function ModCard({ mod, installing, installed, error, onInstall, onDetail, versi
       </div>
 
       <div
-        className="flex items-center justify-between px-3 py-2.5 border-t border-gray-700/40"
+        className="flex items-center justify-between px-3 py-2.5 border-t border-purple-500/10"
         onClick={e => e.stopPropagation()}
       >
         <span className="text-xs flex items-center gap-1 text-gray-600">
@@ -320,10 +333,10 @@ function ModDetailView({ mod, installing, installed, installError, onInstall, on
 
       {/* Deps notice */}
       {depsNotice && (
-        <div className="mx-4 mt-3 rounded-xl px-4 py-3 flex items-start gap-3 border bg-indigo-500/10 border-indigo-500/25 flex-shrink-0">
+        <div className="mx-4 mt-3 rounded-xl px-4 py-3 flex items-start gap-3 border bg-purple-500/10 border-purple-500/25 flex-shrink-0">
           <div className="flex-1 min-w-0">
             {depsNotice.deps.length > 0 && (
-              <p className="text-xs font-medium text-indigo-300">
+              <p className="text-xs font-medium text-purple-300">
                 Dependencias instaladas: {depsNotice.deps.map(d => d.name).join(', ')}
               </p>
             )}
@@ -343,7 +356,7 @@ function ModDetailView({ mod, installing, installed, installError, onInstall, on
       <div className="flex-1 overflow-y-auto custom-scrollbar">
 
         {/* Hero */}
-        <div className="relative px-5 py-5 border-b border-gray-700/60 bg-gray-800/30">
+        <div className="relative px-5 py-5 border-b border-purple-500/15 bg-purple-950/20">
           <div className="flex items-start gap-4">
             {mod.logo?.url || mod.logo?.thumbnailUrl ? (
               <img
@@ -368,7 +381,7 @@ function ModDetailView({ mod, installing, installed, installError, onInstall, on
                   {formatDownloads(mod.downloadCount)} descargas
                 </span>
                 {([...new Set((mod.latestFilesIndexes || []).map((f: any) => f.modLoader as number))].filter(Boolean) as number[]).slice(0, 4).map(l => LOADER_NAMES[l] && (
-                  <span key={l} className="text-[10px] px-1.5 py-px rounded-full font-medium border bg-gray-700/60 border-gray-600/60 text-gray-400">
+                  <span key={l} className={`text-[10px] px-1.5 py-px rounded-full font-medium border ${LOADER_COLORS[l] ?? 'bg-gray-700/60 border-gray-600/60 text-gray-400'}`}>
                     {LOADER_NAMES[l]}
                   </span>
                 ))}
@@ -413,7 +426,7 @@ function ModDetailView({ mod, installing, installed, installError, onInstall, on
                 key={key}
                 onClick={() => setDetailTab(key)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  detailTab === key ? 'bg-purple-500/20 text-purple-300' : 'text-gray-500 hover:text-gray-300'
+                  detailTab === key ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-700/30'
                 }`}
               >
                 {labels[key]}
@@ -460,7 +473,7 @@ function ModDetailView({ mod, installing, installed, installError, onInstall, on
                   {pagedFiles.map(file => {
                     const installable = isInstallable(file)
                     return (
-                      <div key={file.id} className="flex items-center justify-between px-4 py-3 rounded-xl border gap-3 bg-gray-800/40 border-gray-700/40">
+                      <div key={file.id} className="flex items-center justify-between px-4 py-3 rounded-xl border gap-3 bg-gray-800/50 border-purple-500/15 hover:border-purple-500/30 hover:bg-purple-950/10 transition-colors">
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-medium truncate text-gray-200">{file.displayName || file.fileName}</p>
                           <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -468,7 +481,7 @@ function ModDetailView({ mod, installing, installed, installError, onInstall, on
                               <span key={v} className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-gray-700/60 text-gray-400">{v}</span>
                             ))}
                             {getFileLoader(file) && (
-                              <span className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-purple-500/15 text-purple-400">{getFileLoader(file)}</span>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium border ${LOADER_NAME_COLORS[getFileLoader(file)!] ?? 'bg-gray-700/60 border-gray-600/60 text-gray-400'}`}>{getFileLoader(file)}</span>
                             )}
                             {formatFileDate(file.fileDate) && (
                               <span className="text-[10px] text-gray-600">{formatFileDate(file.fileDate)}</span>
@@ -636,7 +649,7 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" onClick={onClose} />
       <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none p-3 md:p-6">
         <div
-          className="w-full max-w-5xl h-full max-h-[92vh] rounded-2xl shadow-2xl border pointer-events-auto flex flex-col bg-gradient-to-br from-gray-800 to-gray-900 border-purple-500/30"
+          className="w-full max-w-5xl h-full max-h-[92vh] rounded-2xl shadow-2xl border pointer-events-auto flex flex-col bg-gradient-to-br from-gray-900 via-purple-950/30 to-[#0a0a14] border-purple-500/30"
           onClick={e => e.stopPropagation()}
         >
 
@@ -652,7 +665,7 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
             </div>
             <button
               onClick={onClose}
-              className="p-1.5 rounded-lg transition-colors hover:bg-gray-700 text-gray-400 hover:text-gray-200"
+              className="p-1.5 rounded-lg transition-colors hover:bg-purple-500/15 text-gray-400 hover:text-gray-200"
             >
               <X size={15} />
             </button>
@@ -712,7 +725,7 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
 
               {/* Deps notice */}
               {depsNotice && (
-                <div className="mx-4 mt-3 rounded-xl px-4 py-3 flex items-start gap-3 border bg-indigo-500/10 border-indigo-500/25 flex-shrink-0">
+                <div className="mx-4 mt-3 rounded-xl px-4 py-3 flex items-start gap-3 border bg-purple-500/10 border-purple-500/25 flex-shrink-0">
                   <div className="flex-1 min-w-0">
                     {depsNotice.deps.length > 0 && (
                       <p className="text-xs font-medium text-indigo-300">

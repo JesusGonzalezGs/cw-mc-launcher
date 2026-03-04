@@ -47,7 +47,7 @@ export default function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className={`relative w-full ${maxWidth} rounded-2xl shadow-2xl border bg-gradient-to-br from-gray-800 to-gray-900 border-purple-500/30`}
+        className={`relative w-full ${maxWidth} rounded-2xl shadow-2xl border bg-gradient-to-br from-gray-900 via-purple-950/30 to-[#0a0a14] border-purple-500/30`}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700/60">
@@ -62,7 +62,7 @@ export default function Modal({
           <button
             onClick={onClose}
             aria-label="Cerrar"
-            className="p-1.5 rounded-lg transition-colors hover:bg-gray-700 text-gray-400 hover:text-white"
+            className="p-1.5 rounded-lg transition-colors hover:bg-purple-500/15 text-gray-400 hover:text-white"
           >
             <X size={15} aria-hidden="true" />
           </button>

@@ -51,7 +51,7 @@ export default function App() {
         <TitleBar />
         <div className="flex flex-1 overflow-hidden">
           <Sidebar />
-          <main className="flex-1 overflow-y-auto custom-scrollbar bg-[radial-gradient(ellipse_at_top,_#1e1040_0%,_#0f0f1a_60%,_#0a0a14_100%)]">
+          <main className="flex-1 overflow-y-auto [scrollbar-gutter:stable] custom-scrollbar bg-[radial-gradient(ellipse_at_top,_#1e1040_0%,_#0f0f1a_60%,_#0a0a14_100%)]">
             <Routes>
               <Route path="/" element={<Navigate to="/instances" replace />} />
               <Route path="/instances" element={<InstancesPage />} />

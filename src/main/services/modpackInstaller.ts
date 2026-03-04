@@ -19,6 +19,7 @@ import {
 import { createInstance, getInstanceDir, getModsDir } from './instanceManager'
 import type { Instance } from './instanceManager'
 import type { ModLoader } from './modLoaderInstaller'
+import { identifyMods } from './modManager'
 
 export interface InstallProgress {
   stage: string
@@ -144,7 +145,11 @@ export async function installCurseForgeModpack(
     })
   }
 
-  // 10. Actualizar instancia con resolvedVersionId
+  // 10. Identificar mods y guardar metadatos + deps
+  onProgress({ stage: 'Identificando mods...', current: 0, total: 100, percent: 96 })
+  await identifyMods(instance.id).catch(() => {})
+
+  // 11. Actualizar instancia con resolvedVersionId
   const settings = getSettings()
   const updatedInstance: Instance = {
     ...instance,

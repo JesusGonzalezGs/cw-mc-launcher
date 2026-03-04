@@ -16,6 +16,7 @@ export interface ModMeta {
   summary?: string
   gameVersions: string[]
   recognized?: boolean
+  deps?: number[]
 }
 
 export interface ModsJson {
@@ -86,6 +87,9 @@ async function installSingle(
     gameVersions = file?.gameVersions ?? []
     if (mod) {
       name = mod.name ?? name
+      const deps = (file?.dependencies ?? [])
+        .filter((d: any) => d.relationType === 3)
+        .map((d: any) => d.modId as number)
       modsJson.mods[filename] = {
         modId, fileId,
         name,
@@ -93,6 +97,7 @@ async function installSingle(
         logo: mod.logo?.thumbnailUrl,
         summary: mod.summary,
         gameVersions,
+        deps,
       }
     }
   } catch { /* metadata optional */ }
@@ -113,18 +118,13 @@ export async function installModWithDeps(
 
   const { filename, name } = await installSingle(instanceId, modId, fileId, modsJson, onProgress)
 
-  // Dependency resolution
-  let requiredDeps: any[] = []
-  try {
-    const fileData = (await cfGetFileDetails(modId, fileId)) as any
-    requiredDeps = (fileData?.data?.dependencies ?? []).filter((d: any) => d.relationType === 3)
-  } catch { /* no deps */ }
+  // Dependency resolution — deps are stored by installSingle from the file metadata
+  const requiredDepIds: number[] = modsJson.mods[filename]?.deps ?? []
 
   const depsInstalled: { filename: string; name: string }[] = []
   const depsFailed: { modId: number; error: string }[] = []
 
-  for (const dep of requiredDeps) {
-    const depModId: number = dep.modId
+  for (const depModId of requiredDepIds) {
     if (Object.values(modsJson.mods).some((m) => m.modId === depModId)) continue
 
     try {
@@ -135,6 +135,7 @@ export async function installModWithDeps(
         depsFailed.push({ modId: depModId, error: 'Sin versiones compatibles' })
         continue
       }
+      // installSingle also stores deps for the dependency mod itself
       const depResult = await installSingle(instanceId, depModId, files[0].id, modsJson, onProgress)
       depsInstalled.push(depResult)
     } catch (err: any) {
@@ -164,7 +165,8 @@ export async function identifyMods(
   for (const filename of allFiles) {
     const cleanName = filename.replace('.jar.disabled', '.jar')
     const existing = modsJson.mods[cleanName] ?? modsJson.mods[filename]
-    if (existing?.recognized !== undefined) continue
+    if (existing?.recognized === false) continue
+    if (existing?.recognized === true && existing?.deps !== undefined) continue
     try {
       const buf = fs.readFileSync(path.join(modsDir, filename))
       toIdentify.push({ filename, cleanName, fingerprint: cfFingerprint(buf) })
@@ -192,6 +194,9 @@ export async function identifyMods(
     const modId: number = match.id
     const fileId: number = match.file?.id ?? 0
     const gameVersions: string[] = match.file?.gameVersions ?? []
+    const deps: number[] = (match.file?.dependencies ?? [])
+      .filter((d: any) => d.relationType === 3)
+      .map((d: any) => d.modId as number)
 
     let name = entry.cleanName.replace('.jar', '')
     let slug = ''
@@ -206,7 +211,7 @@ export async function identifyMods(
 
     modsJson.mods[entry.cleanName] = {
       ...(modsJson.mods[entry.cleanName] ?? {}),
-      modId, fileId, name, slug, logo, summary, gameVersions, recognized: true,
+      modId, fileId, name, slug, logo, summary, gameVersions, recognized: true, deps,
     }
     if (entry.filename !== entry.cleanName) delete modsJson.mods[entry.filename]
   }
