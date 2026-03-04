@@ -6,7 +6,7 @@ import fs from 'fs'
 import path from 'path'
 import os from 'os'
 import { getSettings } from '../store'
-import { cfGetDownloadUrl } from './curseforgeService'
+import { cfGetDownloadUrl, cfGetModsBatch } from './curseforgeService'
 import { downloadFile } from '../utils/downloadHelper'
 import { extractZip } from '../utils/platform'
 import { downloadVersionFiles } from './gameDownloader'
@@ -20,6 +20,7 @@ import { createInstance, deleteInstance, getInstanceDir, getModsDir } from './in
 import type { Instance } from './instanceManager'
 import type { ModLoader } from './modLoaderInstaller'
 import { identifyMods } from './modManager'
+import { identifyFiles } from './fileManager'
 
 export interface InstallProgress {
   stage: string
@@ -152,38 +153,60 @@ export async function installCurseForgeModpack(
     resolvedVersionId = `neoforge-${loaderVersion}`
   }
 
-  // 9. Descargar mods del manifest
+  // 9. Clasificar archivos del manifest por classId
+  check()
+  onProgress({ stage: 'Clasificando archivos...', current: 0, total: 100, percent: 63 })
+  const CLASS_FOLDER: Record<number, string> = {
+    6:    'mods',
+    12:   'resourcepacks',
+    6552: 'shaderpacks',
+    6945: 'datapacks',
+  }
+  const projectIds = [...new Set(modFiles.map(f => f.projectID))]
+  const modsMeta = await cfGetModsBatch(projectIds).catch(() => ({} as Record<number, any>))
+
+  // 10. Descargar archivos al directorio correcto
   check()
   let modsDone = 0
   for (const modEntry of modFiles) {
     check()
     try {
+      const classId: number = modsMeta[modEntry.projectID]?.classId ?? 6
+      const folder = CLASS_FOLDER[classId] ?? 'mods'
+      const destDir = path.join(instanceDir, folder)
+      fs.mkdirSync(destDir, { recursive: true })
+
       const url = await cfGetDownloadUrl(modEntry.projectID, modEntry.fileID)
       if (!url) continue
-      const filename = decodeURIComponent(url.split('/').pop() ?? `mod-${modEntry.fileID}.jar`)
-      const destPath = path.join(modsDir, filename)
+      const filename = decodeURIComponent(url.split('/').pop() ?? `file-${modEntry.fileID}`)
+      const destPath = path.join(destDir, filename)
       if (!fs.existsSync(destPath)) {
         await downloadFile(url, destPath, undefined, undefined, signal)
       }
     } catch (e: any) {
       if (e?.message === 'CANCELLED') throw e
-      /* continuar con el siguiente mod */
+      /* continuar con el siguiente archivo */
     }
 
     modsDone++
     onProgress({
-      stage: 'Descargando mods...',
+      stage: 'Descargando archivos...',
       current: modsDone,
       total: modFiles.length,
-      percent: 65 + Math.round((modsDone / modFiles.length) * 30),
+      percent: 65 + Math.round((modsDone / modFiles.length) * 28),
     })
   }
 
-  // 10. Identificar mods y guardar metadatos + deps
-  onProgress({ stage: 'Identificando mods...', current: 0, total: 100, percent: 96 })
+  // 11. Identificar mods y recursos
+  onProgress({ stage: 'Identificando mods...', current: 0, total: 100, percent: 94 })
   await identifyMods(instance.id).catch(() => {})
+  await Promise.all([
+    identifyFiles(instance.id, 'resourcepacks').catch(() => {}),
+    identifyFiles(instance.id, 'shaderpacks').catch(() => {}),
+    identifyFiles(instance.id, 'datapacks').catch(() => {}),
+  ])
 
-  // 11. Actualizar instancia con resolvedVersionId
+  // 12. Actualizar instancia con resolvedVersionId
   const settings = getSettings()
   const updatedInstance: Instance = {
     ...instance,

@@ -101,6 +101,25 @@ export async function cfGetMod(modId: number) {
   return resp.json()
 }
 
+export async function cfGetModsBatch(modIds: number[]): Promise<Record<number, any>> {
+  const CHUNK = 100
+  const result: Record<number, any> = {}
+  for (let i = 0; i < modIds.length; i += CHUNK) {
+    const chunk = modIds.slice(i, i + CHUNK)
+    try {
+      const resp = await fetch(`${CF_BASE}/mods`, {
+        method: 'POST',
+        headers: cfHeaders(),
+        body: JSON.stringify({ modIds: chunk }),
+      })
+      if (!resp.ok) continue
+      const json: any = await resp.json()
+      for (const mod of (json.data ?? [])) result[mod.id] = mod
+    } catch { /* continuar con el siguiente chunk */ }
+  }
+  return result
+}
+
 export async function cfGetModDescription(modId: number): Promise<string> {
   const resp = await fetch(`${CF_BASE}/mods/${modId}/description`, { headers: cfHeaders() })
   if (!resp.ok) return ''
@@ -139,9 +158,23 @@ export async function cfGetDownloadUrl(modId: number, fileId: number): Promise<s
   const resp = await fetch(`${CF_BASE}/mods/${modId}/files/${fileId}/download-url`, {
     headers: cfHeaders(),
   })
-  if (!resp.ok) throw new Error(`CurseForge downloadUrl error: ${resp.status}`)
-  const data = (await resp.json()) as any
-  return data?.data ?? ''
+
+  if (resp.ok) {
+    const data = (await resp.json()) as any
+    if (data?.data) return data.data
+  }
+
+  // Fallback para archivos con distribución restringida (403): construir URL del CDN
+  // o usar downloadUrl del detalle del archivo
+  const detailResp = await fetch(`${CF_BASE}/mods/${modId}/files/${fileId}`, { headers: cfHeaders() })
+  if (!detailResp.ok) throw new Error(`CurseForge downloadUrl error: ${resp.status}`)
+  const detail = (await detailResp.json()) as any
+  const file = detail?.data
+  if (file?.downloadUrl) return file.downloadUrl
+  if (file?.fileName) {
+    return `https://mediafilez.forgecdn.net/files/${Math.floor(fileId / 1000)}/${fileId % 1000}/${encodeURIComponent(file.fileName)}`
+  }
+  throw new Error(`CurseForge downloadUrl error: ${resp.status}`)
 }
 
 export async function cfGetFileDetails(modId: number, fileId: number) {
