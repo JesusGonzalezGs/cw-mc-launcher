@@ -42,6 +42,13 @@ declare global {
         installModWithDeps: (instanceId: string, modId: number, fileId: number) => Promise<any>
         identifyMods: (instanceId: string) => Promise<any>
         openFolder: (id: string) => Promise<void>
+        toggleFile: (id: string, folder: string, filename: string) => Promise<string>
+        installFile: (id: string, folder: string, modId: number, fileId: number) => Promise<{ ok: boolean; filename: string }>
+        listFolder: (id: string, folder: string) => Promise<{ name: string; isDir: boolean }[]>
+        deleteFile: (id: string, folder: string, filename: string) => Promise<void>
+        getFilesMeta: (id: string, folder: string) => Promise<{ files: Record<string, any> }>
+        identifyFiles: (id: string, folder: string) => Promise<void>
+        openSubFolder: (id: string, folder: string) => Promise<void>
         getCrashReport: (id: string) => Promise<string | null>
       }
       mc: {
@@ -62,6 +69,7 @@ declare global {
       cf: {
         searchModpacks: (params: any) => Promise<any>
         searchMods: (params: any) => Promise<any>
+        searchFiles: (params: any) => Promise<any>
         getCategories: () => Promise<any>
         getMod: (modId: number) => Promise<any>
         getModDescription: (modId: number) => Promise<string>

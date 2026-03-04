@@ -58,6 +58,13 @@ contextBridge.exposeInMainWorld('launcher', {
     identifyMods: (instanceId: string) =>
       ipcRenderer.invoke('instances:identifyMods', instanceId),
     openFolder: (id: string) => ipcRenderer.invoke('instances:openFolder', id),
+    toggleFile: (id: string, folder: string, filename: string) => ipcRenderer.invoke('instances:toggleFile', id, folder, filename),
+    installFile: (id: string, folder: string, modId: number, fileId: number) => ipcRenderer.invoke('instances:installFile', id, folder, modId, fileId),
+    listFolder: (id: string, folder: string) => ipcRenderer.invoke('instances:listFolder', id, folder),
+    deleteFile: (id: string, folder: string, filename: string) => ipcRenderer.invoke('instances:deleteFile', id, folder, filename),
+    getFilesMeta: (id: string, folder: string) => ipcRenderer.invoke('instances:getFilesMeta', id, folder),
+    identifyFiles: (id: string, folder: string) => ipcRenderer.invoke('instances:identifyFiles', id, folder),
+    openSubFolder: (id: string, folder: string) => ipcRenderer.invoke('instances:openSubFolder', id, folder),
     getCrashReport: (id: string) => ipcRenderer.invoke('instances:getCrashReport', id),
   },
 
@@ -84,6 +91,7 @@ contextBridge.exposeInMainWorld('launcher', {
   cf: {
     searchModpacks: (params: any) => ipcRenderer.invoke('cf:searchModpacks', params),
     searchMods: (params: any) => ipcRenderer.invoke('cf:searchMods', params),
+    searchFiles: (params: any) => ipcRenderer.invoke('cf:searchFiles', params),
     getCategories: () => ipcRenderer.invoke('cf:getCategories'),
     getMod: (modId: number) => ipcRenderer.invoke('cf:getMod', modId),
     getFileDetails: (modId: number, fileId: number) => ipcRenderer.invoke('cf:getFileDetails', modId, fileId),

@@ -58,6 +58,7 @@ import {
 } from './services/curseforgeService'
 import { installCurseForgeModpack, cancelInstall } from './services/modpackInstaller'
 import { installModWithDeps, readModsJson, removeModMeta, identifyMods } from './services/modManager'
+import { installFileWithMeta, identifyFiles, readFilesJson, removeFileMeta } from './services/fileManager'
 import { launchInstance, isInstanceRunning, stopInstance } from './services/gameLauncher'
 import { downloadFile } from './utils/downloadHelper'
 import path from 'path'
@@ -301,6 +302,10 @@ export function registerIpcHandlers(): void {
     cfSearch({ ...params, classId: 6 })
   )
 
+  ipcMain.handle('cf:searchFiles', (_, params: any) =>
+    cfSearch(params)
+  )
+
   ipcMain.handle('cf:getCategories', () => cfGetCategories(4471))
 
   ipcMain.handle('cf:getMod', (_, modId: number) => cfGetMod(modId))
@@ -335,6 +340,50 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('app:getVersion', () => app.getVersion())
 
   ipcMain.handle('instances:openFolder', (_, id: string) => shell.openPath(getInstanceDir(id)))
+
+  ipcMain.handle('instances:toggleFile', (_, id: string, folder: string, filename: string): string => {
+    const dir = path.join(getInstanceDir(id), folder)
+    const isDisabled = filename.endsWith('.disabled')
+    const newFilename = isDisabled ? filename.slice(0, -'.disabled'.length) : filename + '.disabled'
+    fs.renameSync(path.join(dir, filename), path.join(dir, newFilename))
+    return newFilename
+  })
+
+  ipcMain.handle('instances:installFile', async (_, id: string, folder: string, modId: number, fileId: number) => {
+    const filename = await installFileWithMeta(id, folder, modId, fileId)
+    return { ok: true, filename }
+  })
+
+  ipcMain.handle('instances:getFilesMeta', (_, id: string, folder: string) => {
+    return readFilesJson(id, folder)
+  })
+
+  ipcMain.handle('instances:identifyFiles', async (_, id: string, folder: string) => {
+    await identifyFiles(id, folder)
+  })
+
+  ipcMain.handle('instances:listFolder', (_, id: string, folder: string): { name: string; isDir: boolean }[] => {
+    const dir = path.join(getInstanceDir(id), folder)
+    if (!fs.existsSync(dir)) return []
+    return fs.readdirSync(dir)
+      .filter(name => (name.endsWith('.zip') || name.endsWith('.zip.disabled')) && fs.statSync(path.join(dir, name)).isFile())
+      .map(name => ({ name, isDir: false }))
+  })
+
+  ipcMain.handle('instances:deleteFile', (_, id: string, folder: string, filename: string): void => {
+    const fp = path.join(getInstanceDir(id), folder, filename)
+    if (!fs.existsSync(fp)) return
+    const stat = fs.statSync(fp)
+    if (stat.isDirectory()) fs.rmSync(fp, { recursive: true, force: true })
+    else fs.unlinkSync(fp)
+    removeFileMeta(id, folder, filename)
+  })
+
+  ipcMain.handle('instances:openSubFolder', (_, id: string, folder: string) => {
+    const dir = path.join(getInstanceDir(id), folder)
+    fs.mkdirSync(dir, { recursive: true })
+    return shell.openPath(dir)
+  })
 
   ipcMain.handle('instances:getCrashReport', (_, id: string): string | null => {
     const crashDir = path.join(getInstanceDir(id), 'crash-reports')

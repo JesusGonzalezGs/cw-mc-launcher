@@ -4,14 +4,17 @@ import {
   ArrowLeft, Play, Square, Package, Terminal, Settings2, Trash2,
   Save, CheckCircle, Download, Loader2, Plus, RefreshCw,
   Search, AlertCircle, X, HelpCircle, FolderOpen, ExternalLink, ArrowUpDown,
+  Layers, Image, Sparkles, Database,
 } from 'lucide-react'
 import type { Instance } from '../types'
 import { LOADER_NAMES } from '../constants'
 import ModCatalogModal from '../components/ModCatalogModal'
+import FileCatalogModal from '../components/FileCatalogModal'
 import FilterSelect from '../components/common/FilterSelect'
 import { getInstanceLogs, appendInstanceLog, clearInstanceLogs } from '../lib/logsStore'
 
-type Tab = 'mods' | 'console' | 'settings'
+type Tab = 'resources' | 'console' | 'settings'
+type ResourceTab = 'mods' | 'datapacks' | 'resourcepacks' | 'shaderpacks'
 
 interface ModMeta {
   modId: number
@@ -39,13 +42,20 @@ export default function InstanceDetailPage() {
 
   const [instance, setInstance] = useState<Instance | null>(null)
   const [isRunning, setIsRunning] = useState(false)
-  const [tab, setTab] = useState<Tab>('mods')
+  const [tab, setTab] = useState<Tab>('resources')
+  const [resourceTab, setResourceTab] = useState<ResourceTab>('mods')
+  const [resourceFiles, setResourceFiles] = useState<Record<string, { name: string; isDir: boolean }[]>>({ datapacks: [], resourcepacks: [], shaderpacks: [] })
+  const [filesMeta, setFilesMeta] = useState<Record<string, Record<string, any>>>({ datapacks: {}, resourcepacks: {}, shaderpacks: {} })
+  const [loadingResource, setLoadingResource] = useState(false)
+  const [identifyingFiles, setIdentifyingFiles] = useState<string | null>(null)
   const [mods, setMods] = useState<string[]>([])
   const [modsMeta, setModsMeta] = useState<Record<string, ModMeta>>({})
   const [logs, setLogs] = useState<string[]>(() => id ? getInstanceLogs(id) : [])
   const [jvmArgs, setJvmArgs] = useState('')
   const [javaInfo, setJavaInfo] = useState<{ version: number; ready: boolean; status: string; progress: number; error: string } | null>(null)
   const [showCatalog, setShowCatalog] = useState(false)
+  const [showFileCatalog, setShowFileCatalog] = useState<ResourceTab | null>(null)
+  const [togglingFile, setTogglingFile] = useState<string | null>(null)
   const [crashReport, setCrashReport] = useState<string | null>(null)
   const [modSort, setModSort] = useState<'default' | 'name' | 'name-desc' | 'enabled' | 'disabled'>('default')
   const [modSearch, setModSearch] = useState('')
@@ -132,6 +142,38 @@ export default function InstanceDetailPage() {
   }, [tab])
 
   useEffect(() => {
+    if (tab !== 'resources' || resourceTab === 'mods' || !id) return
+    setLoadingResource(true)
+    const folder = resourceTab
+    Promise.all([
+      window.launcher.instances.listFolder(id, folder),
+      window.launcher.instances.getFilesMeta(id, folder),
+    ])
+      .then(([files, meta]) => {
+        setResourceFiles(prev => ({ ...prev, [folder]: files }))
+        const metaFiles = (meta as any).files ?? {}
+        setFilesMeta(prev => ({ ...prev, [folder]: metaFiles }))
+
+        // Auto-identify: zips without recognized metadata
+        const needsId = files.some(f => {
+          const clean = f.name.replace('.disabled', '')
+          const existing = metaFiles[clean] ?? metaFiles[f.name]
+          return existing?.recognized === undefined
+        })
+        if (needsId && !identifyingFiles) {
+          setIdentifyingFiles(folder)
+          window.launcher.instances.identifyFiles(id, folder)
+            .then(() => window.launcher.instances.getFilesMeta(id, folder))
+            .then(meta => setFilesMeta(prev => ({ ...prev, [folder]: (meta as any).files ?? {} })))
+            .catch(() => {})
+            .finally(() => setIdentifyingFiles(null))
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingResource(false))
+  }, [tab, resourceTab, id])
+
+  useEffect(() => {
     if (!javaInfo || javaInfo.status !== 'downloading' || !instance) return
     const timer = setInterval(async () => {
       const info = await window.launcher.java.getForMcVersion(instance.mcVersion)
@@ -146,7 +188,7 @@ export default function InstanceDetailPage() {
     setIsRunning(true)
     clearInstanceLogs(id!)
     setLogs([])
-    setTab('console')
+    setTab('console' as Tab)
     try {
       await window.launcher.instances.launch(instance)
     } catch (e: any) {
@@ -256,9 +298,16 @@ export default function InstanceDetailPage() {
   const logo = instance.cfMeta?.logoUrl
 
   const TABS: [Tab, React.ElementType, string][] = [
-    ['mods',     Package,   `Mods${mods.length > 0 ? ` (${mods.length})` : ''}`],
-    ['console',  Terminal,  'Consola'],
-    ['settings', Settings2, 'Ajustes'],
+    ['resources', Layers,   'Recursos'],
+    ['console',   Terminal, 'Consola'],
+    ['settings',  Settings2,'Ajustes'],
+  ]
+
+  const RESOURCE_TABS: [ResourceTab, React.ElementType, string][] = [
+    ['mods',         Package,  `Mods${mods.length > 0 ? ` (${mods.length})` : ''}`],
+    ['datapacks',    Database, 'Datapacks'],
+    ['resourcepacks',Image,    'Resource Packs'],
+    ['shaderpacks',  Sparkles, 'Shaders'],
   ]
 
   return (
@@ -325,185 +374,330 @@ export default function InstanceDetailPage() {
               ))}
             </div>
 
-            {/* ── Mods ── */}
-            {tab === 'mods' && (
+            {/* ── Resources ── */}
+            {tab === 'resources' && (
               <div className="rounded-2xl border bg-gradient-to-br from-gray-800/90 via-purple-950/10 to-gray-900 border-purple-500/25 flex flex-col">
 
-                {/* Card header */}
-                <div className="flex items-center justify-between px-4 pt-4 pb-3 shrink-0">
-                  <div className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-purple-500/15">
-                      <Package size={14} className="text-purple-400" />
-                    </div>
-                    <span className="text-sm font-semibold text-white">Gestor de mods</span>
-                    {mods.length > 0 && (
-                      <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-700 text-gray-400">
-                        {mods.filter(f => !f.endsWith('.jar.disabled')).length}/{mods.length}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center gap-1.5">
+                {/* Resource sub-tabs */}
+                <div className="flex gap-1 px-3 pt-3 pb-0 shrink-0">
+                  {RESOURCE_TABS.map(([rt, Icon, label]) => (
                     <button
-                      onClick={() => window.launcher.instances.openFolder(id!)}
-                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-700/60 hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors"
-                      title="Abrir carpeta de la instancia"
+                      key={rt}
+                      onClick={() => setResourceTab(rt)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-t-xl text-xs font-medium border-b-2 transition-all ${
+                        resourceTab === rt
+                          ? 'text-purple-300 border-purple-500 bg-purple-500/10'
+                          : 'text-gray-500 border-transparent hover:text-gray-300 hover:bg-gray-700/30'
+                      }`}
                     >
-                      <FolderOpen size={12} />
-                      Carpeta
+                      <Icon size={12} />
+                      {label}
                     </button>
-                    {instance.modLoader !== 'vanilla' && (
-                      <button
-                        onClick={() => setShowCatalog(true)}
-                        className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-purple-200 transition-colors"
-                      >
-                        <Plus size={12} />
-                        Catálogo
-                      </button>
-                    )}
-                  </div>
+                  ))}
                 </div>
 
-                {/* Search + sort */}
-                <div className="mx-4 mb-3 shrink-0 flex flex-wrap gap-2.5 p-3 rounded-2xl border bg-gray-800/40 border-gray-700/50">
-                  <div className="relative flex-1 min-w-[160px]">
-                    <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                    <input
-                      type="text"
-                      value={modSearch}
-                      onChange={(e) => setModSearch(e.target.value)}
-                      placeholder="Buscar mod..."
-                      className="w-full bg-gray-800/80 border border-gray-700/80 rounded-xl pl-9 pr-8 py-2 text-sm text-gray-200 placeholder-gray-500 outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 focus:ring-offset-0 transition-all"
-                    />
-                    {modSearch && (
-                      <button onClick={() => setModSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400">
-                        <X size={12} />
-                      </button>
+                <div className="border-t border-gray-700/50 mx-0" />
+
+                {/* ── Mods sub-tab ── */}
+                {resourceTab === 'mods' && (
+                  <>
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-4 pt-3 pb-3 shrink-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-semibold text-white">Mods instalados</span>
+                        {mods.length > 0 && (
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-gray-700 text-gray-400">
+                            {mods.filter(f => !f.endsWith('.jar.disabled')).length}/{mods.length}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => window.launcher.instances.openSubFolder(id!, 'mods')}
+                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-700/60 hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors"
+                        >
+                          <FolderOpen size={12} />
+                          Carpeta
+                        </button>
+                        {instance.modLoader !== 'vanilla' && (
+                          <button
+                            onClick={() => setShowCatalog(true)}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-purple-200 transition-colors"
+                          >
+                            <Plus size={12} />
+                            Catálogo
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Search + sort */}
+                    <div className="mx-4 mb-3 shrink-0 flex flex-wrap gap-2.5 p-3 rounded-2xl border bg-gray-800/40 border-gray-700/50">
+                      <div className="relative flex-1 min-w-[160px]">
+                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                        <input
+                          type="text"
+                          value={modSearch}
+                          onChange={(e) => setModSearch(e.target.value)}
+                          placeholder="Buscar mod..."
+                          className="w-full bg-gray-800/80 border border-gray-700/80 rounded-xl pl-9 pr-8 py-2 text-sm text-gray-200 placeholder-gray-500 outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 focus:ring-offset-0 transition-all"
+                        />
+                        {modSearch && (
+                          <button onClick={() => setModSearch('')} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-600 hover:text-gray-400">
+                            <X size={12} />
+                          </button>
+                        )}
+                      </div>
+                      <FilterSelect
+                        icon={ArrowUpDown}
+                        value={modSort}
+                        onChange={(v) => setModSort(v as typeof modSort)}
+                        options={[
+                          { value: 'default',   label: 'Sin ordenar' },
+                          { value: 'name',      label: 'Nombre A–Z' },
+                          { value: 'name-desc', label: 'Nombre Z–A' },
+                          { value: 'enabled',   label: 'Activos primero' },
+                          { value: 'disabled',  label: 'Desactivados primero' },
+                        ]}
+                      />
+                    </div>
+
+                    {/* Identifying banner */}
+                    {identifyingMods && (
+                      <div className="mx-4 mb-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs bg-purple-500/10 border border-purple-500/20 text-purple-300 shrink-0">
+                        <RefreshCw size={11} className="animate-spin shrink-0" />
+                        Identificando mods con CurseForge…
+                      </div>
                     )}
-                  </div>
-                  <FilterSelect
-                    icon={ArrowUpDown}
-                    value={modSort}
-                    onChange={(v) => setModSort(v as typeof modSort)}
-                    options={[
-                      { value: 'default',   label: 'Sin ordenar' },
-                      { value: 'name',      label: 'Nombre A–Z' },
-                      { value: 'name-desc', label: 'Nombre Z–A' },
-                      { value: 'enabled',   label: 'Activos primero' },
-                      { value: 'disabled',  label: 'Desactivados primero' },
-                    ]}
-                  />
-                </div>
 
-                {/* Identifying banner */}
-                {identifyingMods && (
-                  <div className="mx-4 mb-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs bg-purple-500/10 border border-purple-500/20 text-purple-300 shrink-0">
-                    <RefreshCw size={11} className="animate-spin shrink-0" />
-                    Identificando mods con CurseForge…
-                  </div>
-                )}
-
-                {/* Mod list */}
-                <div className="overflow-y-auto px-4 pb-4 custom-scrollbar max-h-[520px] min-h-[160px]">
-                  {filteredMods.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center gap-4 text-center py-16">
-                      {mods.length === 0 ? (
-                        <>
-                          <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-gray-800/60">
-                            <Package size={24} className="text-gray-600" />
-                          </div>
-                          <div>
-                            <p className="text-gray-400 text-sm font-medium">Sin mods instalados</p>
-                            <p className="text-gray-600 text-xs mt-1">
-                              {instance.modLoader === 'vanilla'
-                                ? 'Vanilla no soporta mods — usa Forge, Fabric u otro loader'
-                                : 'Añade mods desde el catálogo de CurseForge'}
-                            </p>
-                          </div>
-                          {instance.modLoader !== 'vanilla' && (
-                            <button
-                              onClick={() => setShowCatalog(true)}
-                              className="flex items-center gap-2 px-4 py-2 bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 rounded-xl text-sm font-medium transition-colors"
-                            >
-                              <Plus size={14} />
-                              Explorar mods
-                            </button>
+                    {/* Mod list */}
+                    <div className="overflow-y-auto px-4 pb-4 custom-scrollbar max-h-[460px] min-h-[140px]">
+                      {filteredMods.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center gap-4 text-center py-14">
+                          {mods.length === 0 ? (
+                            <>
+                              <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-gray-800/60">
+                                <Package size={24} className="text-gray-600" />
+                              </div>
+                              <div>
+                                <p className="text-gray-400 text-sm font-medium">Sin mods instalados</p>
+                                <p className="text-gray-600 text-xs mt-1">
+                                  {instance.modLoader === 'vanilla'
+                                    ? 'Vanilla no soporta mods — usa Forge, Fabric u otro loader'
+                                    : 'Añade mods desde el catálogo de CurseForge'}
+                                </p>
+                              </div>
+                              {instance.modLoader !== 'vanilla' && (
+                                <button
+                                  onClick={() => setShowCatalog(true)}
+                                  className="flex items-center gap-2 px-4 py-2 bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 rounded-xl text-sm font-medium transition-colors"
+                                >
+                                  <Plus size={14} />
+                                  Explorar mods
+                                </button>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <Search size={20} className="text-gray-600" />
+                              <p className="text-gray-500 text-sm">Sin resultados para "{modSearch}"</p>
+                            </>
                           )}
-                        </>
+                        </div>
                       ) : (
-                        <>
-                          <Search size={20} className="text-gray-600" />
-                          <p className="text-gray-500 text-sm">Sin resultados para "{modSearch}"</p>
-                        </>
+                        <div className="flex flex-col gap-1">
+                          {filteredMods.map((filename) => {
+                            const enabled = !filename.endsWith('.jar.disabled')
+                            const cleanName = filename.replace('.jar.disabled', '.jar')
+                            const meta = modsMeta[cleanName] ?? modsMeta[filename]
+                            const displayName = meta?.name ?? cleanName.replace('.jar', '')
+                            const isToggling = togglingMod === filename
+                            return (
+                              <div
+                                key={filename}
+                                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl border transition-all ${!enabled ? 'opacity-55 border-gray-700/30' : 'border-gray-700/40 hover:border-gray-600/60 hover:bg-gray-700/20'}`}
+                              >
+                                <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center overflow-hidden ${meta?.logo ? '' : meta?.recognized === false ? 'bg-gray-700/70' : 'bg-purple-500/15'}`}>
+                                  {meta?.logo ? (
+                                    <img src={meta.logo} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+                                  ) : meta?.recognized === false ? (
+                                    <HelpCircle size={15} className="text-gray-500" />
+                                  ) : (
+                                    <Package size={15} className="text-purple-400 opacity-70" />
+                                  )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium truncate text-gray-200">{displayName}</p>
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <span className="text-[10px] font-mono truncate text-gray-600">{cleanName.replace('.jar', '')}</span>
+                                    {meta?.recognized === false && <span className="text-[10px] text-gray-600 shrink-0">· no reconocido</span>}
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={() => handleToggleMod(filename)}
+                                  disabled={!!togglingMod}
+                                  aria-label={enabled ? `Desactivar ${displayName}` : `Activar ${displayName}`}
+                                  className={`relative shrink-0 w-10 h-5 rounded-full transition-colors duration-200 disabled:cursor-wait ${enabled ? 'bg-green-500 hover:bg-green-400' : 'bg-gray-600 hover:bg-gray-500'}`}
+                                >
+                                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200 ${enabled ? 'left-5' : 'left-0.5'} ${isToggling ? 'opacity-60' : ''}`} />
+                                </button>
+                                <button
+                                  onClick={() => setModToDelete(filename)}
+                                  disabled={!!togglingMod}
+                                  className="shrink-0 p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:cursor-wait"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            )
+                          })}
+                        </div>
                       )}
                     </div>
-                  ) : (
-                    <div className="flex flex-col gap-1">
-                      {filteredMods.map((filename) => {
-                        const enabled = !filename.endsWith('.jar.disabled')
-                        const cleanName = filename.replace('.jar.disabled', '.jar')
-                        const meta = modsMeta[cleanName] ?? modsMeta[filename]
-                        const displayName = meta?.name ?? cleanName.replace('.jar', '')
-                        const isToggling = togglingMod === filename
+                  </>
+                )}
 
-                        return (
-                          <div
-                            key={filename}
-                            className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl border transition-all ${!enabled ? 'opacity-55 border-gray-700/30' : 'border-gray-700/40 hover:border-gray-600/60 hover:bg-gray-700/20'}`}
+                {/* ── Generic file sub-tabs (datapacks / resourcepacks / shaderpacks) ── */}
+                {resourceTab !== 'mods' && (() => {
+                  const cfg: Record<string, { icon: React.ElementType; label: string; emptyMsg: string; note?: string }> = {
+                    datapacks:    { icon: Database, label: 'Datapacks',     emptyMsg: 'Sin datapacks instalados',     note: 'Los datapacks de mundo están en saves/<mundo>/datapacks' },
+                    resourcepacks:{ icon: Image,    label: 'Resource Packs', emptyMsg: 'Sin resource packs instalados', note: undefined },
+                    shaderpacks:  { icon: Sparkles, label: 'Shaders',        emptyMsg: 'Sin shaderpacks instalados',    note: 'Requiere OptiFine o Iris instalado' },
+                  }
+                  const { icon: Icon, label, emptyMsg, note } = cfg[resourceTab]
+                  const files = resourceFiles[resourceTab] ?? []
+
+                  async function handleToggleFile(entry: { name: string; isDir: boolean }) {
+                    if (!id || togglingFile) return
+                    setTogglingFile(entry.name)
+                    try {
+                      const newName = await window.launcher.instances.toggleFile(id, resourceTab, entry.name)
+                      setResourceFiles(prev => ({
+                        ...prev,
+                        [resourceTab]: prev[resourceTab].map(f => f.name === entry.name ? { name: newName, isDir: entry.isDir } : f),
+                      }))
+                    } finally {
+                      setTogglingFile(null)
+                    }
+                  }
+
+                  return (
+                    <>
+                      <div className="flex items-center justify-between px-4 pt-3 pb-3 shrink-0">
+                        <span className="text-sm font-semibold text-white">{label}</span>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            onClick={() => window.launcher.instances.openSubFolder(id!, resourceTab)}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-700/60 hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors"
                           >
-                            {/* Logo / icon */}
-                            <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center overflow-hidden ${
-                              meta?.logo ? '' : meta?.recognized === false ? 'bg-gray-700/70' : 'bg-purple-500/15'
-                            }`}>
-                              {meta?.logo ? (
-                                <img src={meta.logo} alt="" className="w-full h-full object-cover"
-                                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-                              ) : meta?.recognized === false ? (
-                                <HelpCircle size={15} className="text-gray-500" />
-                              ) : (
-                                <Package size={15} className="text-purple-400 opacity-70" />
-                              )}
-                            </div>
+                            <FolderOpen size={12} />
+                            Carpeta
+                          </button>
+                          <button
+                            onClick={() => setShowFileCatalog(resourceTab)}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-purple-200 transition-colors"
+                          >
+                            <Plus size={12} />
+                            Catálogo
+                          </button>
+                        </div>
+                      </div>
+                      <div className="overflow-y-auto px-4 pb-4 custom-scrollbar max-h-[460px] min-h-[140px]">
+                        {/* Identifying banner */}
+                      {identifyingFiles === resourceTab && (
+                        <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs bg-purple-500/10 border border-purple-500/20 text-purple-300 shrink-0">
+                          <RefreshCw size={11} className="animate-spin shrink-0" />
+                          Identificando archivos con CurseForge…
+                        </div>
+                      )}
 
-                            {/* Name + status */}
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium truncate text-gray-200">{displayName}</p>
-                              <div className="flex items-center gap-1.5 mt-0.5 min-w-0">
-                                <span className="text-[10px] font-mono truncate text-gray-600">
-                                  {cleanName.replace('.jar', '')}
-                                </span>
-                                {meta?.recognized === false && (
-                                  <span className="text-[10px] text-gray-600 shrink-0">· no reconocido</span>
-                                )}
-                              </div>
-                            </div>
-
-                            {/* Toggle switch */}
-                            <button
-                              onClick={() => handleToggleMod(filename)}
-                              disabled={!!togglingMod}
-                              aria-label={enabled ? `Desactivar ${displayName}` : `Activar ${displayName}`}
-                              className={`relative shrink-0 w-10 h-5 rounded-full transition-colors duration-200 disabled:cursor-wait ${
-                                enabled ? 'bg-green-500 hover:bg-green-400' : 'bg-gray-600 hover:bg-gray-500'
-                              }`}
-                            >
-                              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200 ${enabled ? 'left-5' : 'left-0.5'} ${isToggling ? 'opacity-60' : ''}`} />
-                            </button>
-
-                            {/* Delete */}
-                            <button
-                              onClick={() => setModToDelete(filename)}
-                              disabled={!!togglingMod}
-                              className="shrink-0 p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:cursor-wait"
-                              title="Eliminar"
-                            >
-                              <Trash2 size={14} />
-                            </button>
+                      {loadingResource ? (
+                          <div className="space-y-1.5 py-2">
+                            {[...Array(4)].map((_, i) => <div key={i} className="h-10 rounded-xl animate-pulse bg-gray-700/40" />)}
                           </div>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
+                        ) : files.length === 0 ? (
+                          <div className="flex flex-col items-center justify-center gap-3 text-center py-14">
+                            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-gray-800/60">
+                              <Icon size={22} className="text-gray-600" />
+                            </div>
+                            <div>
+                              <p className="text-gray-400 text-sm font-medium">{emptyMsg}</p>
+                              {note && <p className="text-gray-600 text-xs mt-1">{note}</p>}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setShowFileCatalog(resourceTab)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-300 hover:text-purple-200 bg-purple-500/15 hover:bg-purple-500/25 rounded-xl transition-colors"
+                              >
+                                <Plus size={11} />
+                                Catálogo
+                              </button>
+                              <button
+                                onClick={() => window.launcher.instances.listFolder(id!, resourceTab)
+                                  .then(entries => setResourceFiles(prev => ({ ...prev, [resourceTab]: entries })))}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-300 border border-gray-700/60 rounded-xl transition-colors"
+                              >
+                                <RefreshCw size={11} />
+                                Recargar
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col gap-1 py-1">
+                            {files.map(entry => {
+                              const isDisabled = entry.name.endsWith('.disabled')
+                              const rawName = isDisabled ? entry.name.slice(0, -'.disabled'.length) : entry.name
+                              const meta = filesMeta[resourceTab]?.[rawName] ?? filesMeta[resourceTab]?.[entry.name]
+                              const displayName = meta?.name ?? rawName.replace(/\.zip$/, '')
+                              const isToggling = togglingFile === entry.name
+                              return (
+                                <div
+                                  key={entry.name}
+                                  className={`flex items-center gap-2.5 px-2.5 py-2.5 rounded-xl border transition-all ${isDisabled ? 'opacity-55 border-gray-700/30' : 'border-gray-700/40 hover:border-gray-600/60 hover:bg-gray-700/20'}`}
+                                >
+                                  <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center overflow-hidden ${meta?.logo ? '' : meta?.recognized === false ? 'bg-gray-700/70' : 'bg-purple-500/15'}`}>
+                                    {meta?.logo ? (
+                                      <img src={meta.logo} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+                                    ) : meta?.recognized === false ? (
+                                      <HelpCircle size={14} className="text-gray-500" />
+                                    ) : (
+                                      <Icon size={14} className="text-purple-400 opacity-70" />
+                                    )}
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium truncate text-gray-200">{displayName}</p>
+                                    <div className="flex items-center gap-1.5 mt-0.5">
+                                      <span className="text-[10px] font-mono truncate text-gray-600">{rawName}</span>
+                                      {meta?.recognized === false && <span className="text-[10px] text-gray-600 shrink-0">· no reconocido</span>}
+                                    </div>
+                                  </div>
+                                  <button
+                                    onClick={() => handleToggleFile(entry)}
+                                    disabled={!!togglingFile}
+                                    aria-label={isDisabled ? `Activar ${displayName}` : `Desactivar ${displayName}`}
+                                    className={`relative shrink-0 w-10 h-5 rounded-full transition-colors duration-200 disabled:cursor-wait ${isDisabled ? 'bg-gray-600 hover:bg-gray-500' : 'bg-green-500 hover:bg-green-400'}`}
+                                  >
+                                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200 ${isDisabled ? 'left-0.5' : 'left-5'} ${isToggling ? 'opacity-60' : ''}`} />
+                                  </button>
+                                  <button
+                                    onClick={() => window.launcher.instances.deleteFile(id!, resourceTab, entry.name)
+                                      .then(() => setResourceFiles(prev => ({ ...prev, [resourceTab]: prev[resourceTab].filter(f => f.name !== entry.name) })))}
+                                    disabled={!!togglingFile}
+                                    className="shrink-0 p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:cursor-wait"
+                                    title="Eliminar"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </div>
+                              )
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )
+                })()}
+
               </div>
             )}
 
@@ -746,6 +940,22 @@ export default function InstanceDetailPage() {
           onClose={() => setShowCatalog(false)}
           onModInstalled={refreshMods}
           installedModIds={installedModIds}
+        />
+      )}
+
+      {/* File catalog modal (datapacks / resourcepacks / shaderpacks) */}
+      {showFileCatalog && (
+        <FileCatalogModal
+          instance={instance}
+          type={showFileCatalog}
+          installedFiles={(resourceFiles[showFileCatalog] ?? []).map(e => e.name)}
+          onClose={() => setShowFileCatalog(null)}
+          onInstalled={(filename) => {
+            setResourceFiles(prev => ({
+              ...prev,
+              [showFileCatalog]: [...(prev[showFileCatalog] ?? []), { name: filename, isDir: false }],
+            }))
+          }}
         />
       )}
 
