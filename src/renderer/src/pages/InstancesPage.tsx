@@ -36,6 +36,7 @@ export default function InstancesPage() {
   const [runningIds, setRunningIds] = useState<Set<string>>(new Set())
   const [error, setError] = useState('')
   const [pendingDelete, setPendingDelete] = useState<Instance | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   const [pendingClone, setPendingClone] = useState<Instance | null>(null)
   const [cloneName, setCloneName] = useState('')
   const [cloneNameError, setCloneNameError] = useState('')
@@ -106,8 +107,13 @@ export default function InstancesPage() {
     if (!pendingDelete) return
     const inst = pendingDelete
     setPendingDelete(null)
-    await window.launcher.instances.delete(inst.id)
-    load()
+    setDeletingId(inst.id)
+    try {
+      await window.launcher.instances.delete(inst.id)
+    } finally {
+      setDeletingId(null)
+      load()
+    }
   }
 
   function openCloneModal(instance: Instance) {
@@ -307,15 +313,22 @@ export default function InstancesPage() {
               <InstallingCard key={item.id} name={item.name} percent={progress?.percent ?? 0} stage={progress?.stage ?? ''} />
             ))}
             {visibleInstances.map((inst) => (
-              <InstanceCard
-                key={inst.id}
-                instance={inst}
-                isRunning={runningIds.has(inst.id)}
-                onPlay={() => handlePlay(inst)}
-                onStop={() => handleStop(inst)}
-                onDelete={() => setPendingDelete(inst)}
-                onClone={() => openCloneModal(inst)}
-              />
+              deletingId === inst.id ? (
+                <div key={inst.id} className="rounded-2xl border border-red-500/30 flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-gray-800/90 via-red-950/10 to-gray-900 h-48">
+                  <Loader2 size={20} className="text-red-400 animate-spin" />
+                  <p className="text-xs text-red-400 font-medium">Borrando...</p>
+                </div>
+              ) : (
+                <InstanceCard
+                  key={inst.id}
+                  instance={inst}
+                  isRunning={runningIds.has(inst.id)}
+                  onPlay={() => handlePlay(inst)}
+                  onStop={() => handleStop(inst)}
+                  onDelete={() => setPendingDelete(inst)}
+                  onClone={() => openCloneModal(inst)}
+                />
+              )
             ))}
           </div>
         )}
