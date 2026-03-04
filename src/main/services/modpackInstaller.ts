@@ -49,7 +49,8 @@ export async function installCurseForgeModpack(
   cfName: string,
   cfLogoUrl: string | undefined,
   onProgress: (p: InstallProgress) => void,
-  cfFileVersion?: string
+  cfFileVersion?: string,
+  cfSlug?: string
 ): Promise<Instance> {
   const controller = new AbortController()
   activeController = controller
@@ -113,7 +114,7 @@ export async function installCurseForgeModpack(
     modLoaderVersion: loaderVersion,
     resolvedVersionId: mcVersion,
     source: 'curseforge',
-    cfMeta: { modpackId, fileId, name: cfName, logoUrl: cfLogoUrl, fileVersion: cfFileVersion },
+    cfMeta: { modpackId, fileId, name: cfName, logoUrl: cfLogoUrl, fileVersion: cfFileVersion, slug: cfSlug },
   })
 
   const instanceDir = getInstanceDir(instance.id)

@@ -17,6 +17,8 @@ export interface Instance {
     fileId: number
     name: string
     logoUrl?: string
+    fileVersion?: string
+    slug?: string
   }
 }
 

@@ -150,6 +150,13 @@ export async function cfGetFileDetails(modId: number, fileId: number) {
   return resp.json()
 }
 
+export async function cfGetFileChangelog(modId: number, fileId: number): Promise<string> {
+  const resp = await fetch(`${CF_BASE}/mods/${modId}/files/${fileId}/changelog`, { headers: cfHeaders() })
+  if (!resp.ok) return ''
+  const data = (await resp.json()) as any
+  return data?.data ?? ''
+}
+
 export async function cfGetFingerprintMatches(fingerprints: number[]) {
   const resp = await fetch(`${CF_BASE}/fingerprints`, {
     method: 'POST',

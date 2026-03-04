@@ -30,6 +30,7 @@ export interface Instance {
     name: string
     logoUrl?: string
     fileVersion?: string
+    slug?: string
   }
 }
 

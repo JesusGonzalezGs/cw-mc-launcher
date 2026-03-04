@@ -86,11 +86,12 @@ contextBridge.exposeInMainWorld('launcher', {
     getCategories: () => ipcRenderer.invoke('cf:getCategories'),
     getMod: (modId: number) => ipcRenderer.invoke('cf:getMod', modId),
     getFileDetails: (modId: number, fileId: number) => ipcRenderer.invoke('cf:getFileDetails', modId, fileId),
+    getFileChangelog: (modId: number, fileId: number) => ipcRenderer.invoke('cf:getFileChangelog', modId, fileId),
     getModDescription: (modId: number) => ipcRenderer.invoke('cf:getModDescription', modId),
     getModFiles: (modId: number, gameVersion?: string, loaderType?: number) =>
       ipcRenderer.invoke('cf:getModFiles', modId, gameVersion, loaderType),
-    installModpack: (modpackId: number, fileId: number, name: string, logoUrl?: string, fileVersion?: string) =>
-      ipcRenderer.invoke('cf:installModpack', modpackId, fileId, name, logoUrl, fileVersion),
+    installModpack: (modpackId: number, fileId: number, name: string, logoUrl?: string, fileVersion?: string, slug?: string) =>
+      ipcRenderer.invoke('cf:installModpack', modpackId, fileId, name, logoUrl, fileVersion, slug),
     cancelInstall: () => ipcRenderer.invoke('cf:cancelInstall'),
   },
 
@@ -103,10 +104,17 @@ contextBridge.exposeInMainWorld('launcher', {
   // ── Eventos de main → renderer ───────────────────────────────────────────────
   on: (channel: string, callback: (...args: any[]) => void) => {
     if (!(ALLOWED_EVENTS as readonly string[]).includes(channel)) return
-    ipcRenderer.on(channel, (_event, ...args) => callback(...args))
+    // Store wrapped fn so off() can remove the exact listener that was added
+    const wrapped = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => callback(...args)
+    ;(callback as any).__ipcWrapped = wrapped
+    ipcRenderer.on(channel, wrapped)
   },
   off: (channel: string, callback: (...args: any[]) => void) => {
     if (!(ALLOWED_EVENTS as readonly string[]).includes(channel)) return
-    ipcRenderer.removeListener(channel, callback)
+    const wrapped = (callback as any).__ipcWrapped
+    if (wrapped) {
+      ipcRenderer.removeListener(channel, wrapped)
+      delete (callback as any).__ipcWrapped
+    }
   },
 })

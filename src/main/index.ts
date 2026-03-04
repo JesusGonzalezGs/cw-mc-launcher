@@ -27,6 +27,16 @@ function createWindow(): void {
     return { action: 'deny' }
   })
 
+  // Open external links in the system browser instead of navigating inside Electron
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    const rendererUrl = process.env['ELECTRON_RENDERER_URL'] ?? ''
+    const isInternal = url.startsWith('file://') || (rendererUrl && url.startsWith(rendererUrl))
+    if (!isInternal && (url.startsWith('http://') || url.startsWith('https://'))) {
+      event.preventDefault()
+      shell.openExternal(url)
+    }
+  })
+
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {

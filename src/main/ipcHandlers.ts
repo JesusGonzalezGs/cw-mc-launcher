@@ -53,6 +53,7 @@ import {
   cfGetModFiles,
   cfGetDownloadUrl,
   cfGetFileDetails,
+  cfGetFileChangelog,
   cfGetCategories,
 } from './services/curseforgeService'
 import { installCurseForgeModpack, cancelInstall } from './services/modpackInstaller'
@@ -305,6 +306,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('cf:getMod', (_, modId: number) => cfGetMod(modId))
 
   ipcMain.handle('cf:getFileDetails', (_, modId: number, fileId: number) => cfGetFileDetails(modId, fileId))
+  ipcMain.handle('cf:getFileChangelog', (_, modId: number, fileId: number) => cfGetFileChangelog(modId, fileId))
 
   ipcMain.handle('cf:getModDescription', (_, modId: number) => cfGetModDescription(modId))
 
@@ -312,11 +314,11 @@ export function registerIpcHandlers(): void {
     cfGetModFiles(modId, gameVersion, loaderType)
   )
 
-  ipcMain.handle('cf:installModpack', async (_, modpackId: number, fileId: number, name: string, logoUrl?: string, fileVersion?: string) => {
+  ipcMain.handle('cf:installModpack', async (_, modpackId: number, fileId: number, name: string, logoUrl?: string, fileVersion?: string, slug?: string) => {
     const win = getMainWindow()
     const instance = await installCurseForgeModpack(modpackId, fileId, name, logoUrl, (p) => {
       win?.webContents.send('cf:installProgress', p)
-    }, fileVersion)
+    }, fileVersion, slug)
     return instance
   })
 

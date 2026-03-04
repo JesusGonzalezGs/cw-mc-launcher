@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Download, Loader2, AlertCircle, Check, Search, Tag, Layers } from 'lucide-react'
+import { ArrowLeft, Download, Loader2, AlertCircle, Check, Search, Tag, Layers, ExternalLink } from 'lucide-react'
 import ProgressBar from '../components/ProgressBar'
 import Modal from '../components/common/Modal'
 import FilterSelect from '../components/common/FilterSelect'
@@ -59,6 +59,23 @@ function getFileLoader(file: CfFile): number | null {
   return null
 }
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function sanitizeHtml(html: string): string {
+  let out = html
+  // Replace YouTube iframes (with closing tag) with a clickable link
+  out = out.replace(/<iframe[^>]*src="([^"]*(?:youtube\.com|youtu\.be)[^"]*)"[^>]*>[\s\S]*?<\/iframe>/gi, (_m, src) =>
+    `<a href="${src}" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;margin:4px 0;border-radius:10px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;font-size:12px;font-weight:600;text-decoration:none;">▶ Ver en YouTube</a>`
+  )
+  // Strip remaining iframes (with closing tag, self-closing, or unclosed)
+  out = out.replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
+  out = out.replace(/<iframe[^>]*\/?>/gi, '')
+  // Strip script tags — they can trigger external network requests
+  out = out.replace(/<script[\s\S]*?<\/script>/gi, '')
+  out = out.replace(/<script[^>]*\/?>/gi, '')
+  return out
+}
+
 // ── Sub-components ───────────────────────────────────────────────────────────
 
 function StatBadge({ label, value }: { label: string; value: string }) {
@@ -72,7 +89,7 @@ function StatBadge({ label, value }: { label: string; value: string }) {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-type Tab = 'descripcion' | 'screenshots' | 'versiones'
+type Tab = 'descripcion' | 'screenshots' | 'versiones' | 'changelog'
 
 export default function ModpackDetailPage() {
   const { modpackId } = useParams<{ modpackId: string }>()
@@ -96,6 +113,9 @@ export default function ModpackDetailPage() {
   const [versionSearch, setVersionSearch] = useState('')
   const [versionMcFilter, setVersionMcFilter] = useState('')
   const [versionLoaderFilter, setVersionLoaderFilter] = useState('')
+  const [changelog, setChangelog] = useState<string | null>(null)
+  const [changelogLoading, setChangelogLoading] = useState(false)
+  const [changelogFileId, setChangelogFileId] = useState<number | null>(null)
 
   useEffect(() => {
     window.launcher.instances.list().then((list: any[]) => {
@@ -119,6 +139,22 @@ export default function ModpackDetailPage() {
     }).catch((e) => setError(e.message)).finally(() => setLoading(false))
   }, [modpackId])
 
+
+  useEffect(() => {
+    setChangelogFileId(null)
+    setChangelog(null)
+  }, [selectedFileId])
+
+  useEffect(() => {
+    if (tab !== 'changelog' || !mod || !selectedFileId) return
+    if (changelogFileId === selectedFileId) return
+    setChangelogLoading(true)
+    setChangelog(null)
+    window.launcher.cf.getFileChangelog(mod.id, selectedFileId)
+      .then((html) => { setChangelog(html); setChangelogFileId(selectedFileId) })
+      .catch(() => setChangelog(''))
+      .finally(() => setChangelogLoading(false))
+  }, [tab, selectedFileId, mod?.id])
 
   function openInstallModal(fileId: number) {
     if (installedFileIds.has(fileId)) return
@@ -151,7 +187,7 @@ export default function ModpackDetailPage() {
     startInstall(installId, customName, fileId)
     try {
       const fileVersion = files.find((f) => f.id === fileId)?.displayName ?? undefined
-      await window.launcher.cf.installModpack(mod.id, fileId, customName, mod.logo?.url, fileVersion)
+      await window.launcher.cf.installModpack(mod.id, fileId, customName, mod.logo?.url, fileVersion, (mod as any).slug)
       setDone(true)
       finishInstall(installId)
       setTimeout(() => navigate('/instances'), 2000)
@@ -223,6 +259,7 @@ export default function ModpackDetailPage() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'descripcion', label: 'Descripción' },
+    { id: 'changelog',   label: 'Changelog' },
     { id: 'screenshots', label: `Screenshots${screenshots.length ? ` (${screenshots.length})` : ''}` },
     { id: 'versiones',   label: `Versiones${files.length ? ` (${files.length})` : ''}` },
   ]
@@ -322,39 +359,53 @@ export default function ModpackDetailPage() {
 
               {/* Install action */}
               <div className="flex flex-col gap-2">
-                {(selectedFileId === null || !isFileInstalling(selectedFileId)) && !done && !isSelectedInstalled && (
-                  <button
-                    onClick={() => selectedFileId && openInstallModal(selectedFileId)}
-                    disabled={!selectedFileId || isAnyInstalling}
-                    className="self-start flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-lg shadow-purple-900/25 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-                  >
-                    <Download size={15} />
-                    {isAnyInstalling ? 'Instalación en curso...' : 'Instalar modpack'}
-                  </button>
-                )}
+                <div className="flex flex-wrap items-center gap-2">
+                  {(selectedFileId === null || !isFileInstalling(selectedFileId)) && !done && !isSelectedInstalled && (
+                    <button
+                      onClick={() => selectedFileId && openInstallModal(selectedFileId)}
+                      disabled={!selectedFileId || isAnyInstalling}
+                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-lg shadow-purple-900/25 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                    >
+                      <Download size={15} />
+                      {isAnyInstalling ? 'Instalación en curso...' : 'Instalar modpack'}
+                    </button>
+                  )}
 
-                {(selectedFileId === null || !isFileInstalling(selectedFileId)) && !done && isSelectedInstalled && (
-                  <div className="self-start flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/10 border border-green-500/25">
-                    <Check size={15} className="text-green-400" />
-                    <span className="text-green-400 text-sm font-medium">Esta versión ya está instalada</span>
-                  </div>
-                )}
+                  {(selectedFileId === null || !isFileInstalling(selectedFileId)) && !done && isSelectedInstalled && (
+                    <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/10 border border-green-500/25">
+                      <Check size={15} className="text-green-400" />
+                      <span className="text-green-400 text-sm font-medium">Esta versión ya está instalada</span>
+                    </div>
+                  )}
 
-                {selectedFileId !== null && isFileInstalling(selectedFileId) && progress && !done && (
-                  <div className="max-w-xs">
-                    <ProgressBar percent={progress.percent} label={progress.stage} />
-                  </div>
-                )}
+                  {selectedFileId !== null && isFileInstalling(selectedFileId) && progress && !done && (
+                    <div className="max-w-xs">
+                      <ProgressBar percent={progress.percent} label={progress.stage} />
+                    </div>
+                  )}
 
-                {done && (
-                  <div className="self-start flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/10 border border-green-500/25">
-                    <Check size={15} className="text-green-400" />
-                    <span className="text-green-400 text-sm font-medium">¡Instalado! Redirigiendo...</span>
-                  </div>
-                )}
+                  {done && (
+                    <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/10 border border-green-500/25">
+                      <Check size={15} className="text-green-400" />
+                      <span className="text-green-400 text-sm font-medium">¡Instalado! Redirigiendo...</span>
+                    </div>
+                  )}
+
+                  {(modAny.slug || modAny.links?.websiteUrl) && (
+                    <a
+                      href={modAny.links?.websiteUrl ?? `https://www.curseforge.com/minecraft/modpacks/${modAny.slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-orange-500/30 text-orange-300 hover:bg-orange-500/10 hover:border-orange-400/50 transition-all hover:scale-[1.02] active:scale-95"
+                    >
+                      <ExternalLink size={14} />
+                      CurseForge
+                    </a>
+                  )}
+                </div>
 
                 {error && (
-                  <div className="self-start flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/25">
+                  <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/25">
                     <AlertCircle size={15} className="text-red-400 shrink-0" />
                     <p className="text-red-400 text-sm">{error}</p>
                   </div>
@@ -400,7 +451,7 @@ export default function ModpackDetailPage() {
               <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40">
                 <div
                   className="prose prose-invert prose-sm max-w-none text-gray-300 [&_img]:max-w-full [&_a]:text-purple-400 [&_a]:no-underline [&_a:hover]:underline"
-                  dangerouslySetInnerHTML={{ __html: description }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(description) }}
                 />
               </div>
             ) : (
@@ -561,6 +612,36 @@ export default function ModpackDetailPage() {
             ) : (
               <p className="text-sm text-gray-500">No hay versiones disponibles.</p>
             )
+          )}
+
+          {/* Changelog */}
+          {tab === 'changelog' && (
+            <div>
+              {selectedFileId && (
+                <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-700/50">
+                  <span className="text-xs text-gray-500">Versión:</span>
+                  <span className="text-xs font-medium text-gray-300 bg-gray-800/60 px-2 py-0.5 rounded-lg border border-gray-700/60">
+                    {files.find((f) => f.id === selectedFileId)?.displayName ?? `#${selectedFileId}`}
+                  </span>
+                </div>
+              )}
+              {changelogLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 size={20} className="text-purple-400 animate-spin" />
+                </div>
+              ) : changelog ? (
+                <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40">
+                  <div
+                    className="prose prose-invert prose-sm max-w-none text-gray-300 [&_img]:max-w-full [&_a]:text-purple-400 [&_a]:no-underline [&_a:hover]:underline"
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(changelog) }}
+                  />
+                </div>
+              ) : changelog === '' ? (
+                <p className="text-sm text-gray-500">Sin changelog disponible para esta versión.</p>
+              ) : (
+                <p className="text-sm text-gray-500">Selecciona una versión en la pestaña Versiones para ver su changelog.</p>
+              )}
+            </div>
           )}
 
         </section>

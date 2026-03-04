@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import {
   ArrowLeft, Play, Square, Package, Terminal, Settings2, Trash2,
   Save, CheckCircle, Download, Loader2, Plus, RefreshCw,
-  Search, AlertCircle, X, HelpCircle, FolderOpen,
+  Search, AlertCircle, X, HelpCircle, FolderOpen, ExternalLink,
 } from 'lucide-react'
 import type { Instance } from '../types'
 import { LOADER_NAMES } from '../constants'
@@ -288,6 +288,17 @@ export default function InstanceDetailPage() {
                         <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
                         En juego
                       </span>
+                    )}
+                    {instance.cfMeta?.slug && (
+                      <a
+                        href={`https://www.curseforge.com/minecraft/modpacks/${instance.cfMeta.slug}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-xs border border-orange-500/30 text-orange-300 hover:bg-orange-500/10 hover:border-orange-400/50 transition-all"
+                      >
+                        <ExternalLink size={10} />
+                        CurseForge
+                      </a>
                     )}
                   </div>
                 </div>
