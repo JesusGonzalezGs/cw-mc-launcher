@@ -655,24 +655,17 @@ export default function ModpackDetailPage() {
                     Última versión
                   </button>
                   {files.length > 1 && (
-                    <select
-                      value={changelogViewFileId !== files[0].id ? (changelogViewFileId ?? '') : ''}
-                      onChange={(e) => {
-                        if (!e.target.value) return
-                        const id = Number(e.target.value)
-                        setChangelogViewFileId(id)
-                        setChangelogFileId(null)
-                        setChangelog(null)
-                      }}
-                      className="text-xs px-2.5 py-1 rounded-lg border bg-gray-800/80 border-gray-700/60 text-gray-300 focus:outline-none focus:border-purple-500/50 transition-colors"
-                    >
-                      <option value="">Otras versiones...</option>
-                      {files.slice(1).map((f) => (
-                        <option key={f.id} value={f.id}>
-                          {f.displayName || f.fileName}
-                        </option>
-                      ))}
-                    </select>
+                    //Select Filter by version
+                    <FilterSelect
+                      icon={Layers}
+                      value={String(changelogViewFileId ?? '')}
+                      onChange={(v) => { setChangelogViewFileId(v ? Number(v) : null); setChangelogFileId(null); setChangelog(null) }}
+                      placeholder="Selecciona una versión"
+                      options={[
+                        { value: '', label: 'Selecciona una versión' },
+                        ...files.map((f) => ({ value: String(f.id), label: f.displayName || f.fileName })),
+                      ]}
+                    />
                   )}
                 </div>
               )}
