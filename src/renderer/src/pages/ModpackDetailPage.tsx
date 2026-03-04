@@ -116,6 +116,7 @@ export default function ModpackDetailPage() {
   const [changelog, setChangelog] = useState<string | null>(null)
   const [changelogLoading, setChangelogLoading] = useState(false)
   const [changelogFileId, setChangelogFileId] = useState<number | null>(null)
+  const [changelogViewFileId, setChangelogViewFileId] = useState<number | null>(null)
 
   useEffect(() => {
     window.launcher.instances.list().then((list: any[]) => {
@@ -135,26 +136,24 @@ export default function ModpackDetailPage() {
       setDescription(desc ?? '')
       const fileList: CfFile[] = filesResp?.data ?? []
       setFiles(fileList)
-      if (fileList.length > 0) setSelectedFileId(fileList[0].id)
+      if (fileList.length > 0) {
+        setSelectedFileId(fileList[0].id)
+        setChangelogViewFileId(fileList[0].id)
+      }
     }).catch((e) => setError(e.message)).finally(() => setLoading(false))
   }, [modpackId])
 
 
   useEffect(() => {
-    setChangelogFileId(null)
-    setChangelog(null)
-  }, [selectedFileId])
-
-  useEffect(() => {
-    if (tab !== 'changelog' || !mod || !selectedFileId) return
-    if (changelogFileId === selectedFileId) return
+    if (tab !== 'changelog' || !mod || !changelogViewFileId) return
+    if (changelogFileId === changelogViewFileId) return
     setChangelogLoading(true)
     setChangelog(null)
-    window.launcher.cf.getFileChangelog(mod.id, selectedFileId)
-      .then((html) => { setChangelog(html); setChangelogFileId(selectedFileId) })
+    window.launcher.cf.getFileChangelog(mod.id, changelogViewFileId)
+      .then((html) => { setChangelog(html); setChangelogFileId(changelogViewFileId) })
       .catch(() => setChangelog(''))
       .finally(() => setChangelogLoading(false))
-  }, [tab, selectedFileId, mod?.id])
+  }, [tab, changelogViewFileId, mod?.id])
 
   function openInstallModal(fileId: number) {
     if (installedFileIds.has(fileId)) return
@@ -617,14 +616,43 @@ export default function ModpackDetailPage() {
           {/* Changelog */}
           {tab === 'changelog' && (
             <div>
-              {selectedFileId && (
-                <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-700/50">
-                  <span className="text-xs text-gray-500">Versión:</span>
-                  <span className="text-xs font-medium text-gray-300 bg-gray-800/60 px-2 py-0.5 rounded-lg border border-gray-700/60">
-                    {files.find((f) => f.id === selectedFileId)?.displayName ?? `#${selectedFileId}`}
-                  </span>
+              {/* Version selector */}
+              {files.length > 0 && (
+                <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-700/50 flex-wrap">
+                  <span className="text-xs text-gray-500 shrink-0">Versión:</span>
+                  <button
+                    onClick={() => { if (changelogViewFileId !== files[0].id) { setChangelogViewFileId(files[0].id); setChangelogFileId(null); setChangelog(null) } }}
+                    className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-all ${
+                      changelogViewFileId === files[0].id
+                        ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
+                        : 'bg-gray-800/60 border-gray-700/60 text-gray-400 hover:border-gray-600 hover:text-gray-300'
+                    }`}
+                  >
+                    Última versión
+                  </button>
+                  {files.length > 1 && (
+                    <select
+                      value={changelogViewFileId !== files[0].id ? (changelogViewFileId ?? '') : ''}
+                      onChange={(e) => {
+                        if (!e.target.value) return
+                        const id = Number(e.target.value)
+                        setChangelogViewFileId(id)
+                        setChangelogFileId(null)
+                        setChangelog(null)
+                      }}
+                      className="text-xs px-2.5 py-1 rounded-lg border bg-gray-800/80 border-gray-700/60 text-gray-300 focus:outline-none focus:border-purple-500/50 transition-colors"
+                    >
+                      <option value="">Otras versiones...</option>
+                      {files.slice(1).map((f) => (
+                        <option key={f.id} value={f.id}>
+                          {f.displayName || f.fileName}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               )}
+
               {changelogLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <Loader2 size={20} className="text-purple-400 animate-spin" />
@@ -638,9 +666,7 @@ export default function ModpackDetailPage() {
                 </div>
               ) : changelog === '' ? (
                 <p className="text-sm text-gray-500">Sin changelog disponible para esta versión.</p>
-              ) : (
-                <p className="text-sm text-gray-500">Selecciona una versión en la pestaña Versiones para ver su changelog.</p>
-              )}
+              ) : null}
             </div>
           )}
 
