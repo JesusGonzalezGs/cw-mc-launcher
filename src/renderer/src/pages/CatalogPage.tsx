@@ -170,7 +170,7 @@ export default function CatalogPage() {
               onChange={(e) => setInputQuery(e.target.value)}
               placeholder="Buscar modpack..."
               aria-label="Buscar modpack"
-              className="w-full bg-gray-800/80 border border-gray-700/80 rounded-xl pl-9 pr-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+              className="w-full bg-gray-800/80 border border-gray-700/80 rounded-xl pl-9 pr-3 py-2 text-sm text-gray-200 placeholder-gray-500 outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 focus:ring-offset-0 transition-all"
             />
           </div>
 

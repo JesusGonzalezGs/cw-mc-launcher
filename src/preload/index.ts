@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld('launcher', {
     identifyMods: (instanceId: string) =>
       ipcRenderer.invoke('instances:identifyMods', instanceId),
     openFolder: (id: string) => ipcRenderer.invoke('instances:openFolder', id),
+    getCrashReport: (id: string) => ipcRenderer.invoke('instances:getCrashReport', id),
   },
 
   // ── Minecraft ────────────────────────────────────────────────────────────────

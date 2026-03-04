@@ -335,4 +335,15 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('app:getVersion', () => app.getVersion())
 
   ipcMain.handle('instances:openFolder', (_, id: string) => shell.openPath(getInstanceDir(id)))
+
+  ipcMain.handle('instances:getCrashReport', (_, id: string): string | null => {
+    const crashDir = path.join(getInstanceDir(id), 'crash-reports')
+    if (!fs.existsSync(crashDir)) return null
+    const files = fs.readdirSync(crashDir)
+      .filter(f => f.endsWith('.txt'))
+      .map(f => ({ name: f, mtime: fs.statSync(path.join(crashDir, f)).mtimeMs }))
+      .sort((a, b) => b.mtime - a.mtime)
+    if (!files.length) return null
+    return fs.readFileSync(path.join(crashDir, files[0].name), 'utf-8')
+  })
 }

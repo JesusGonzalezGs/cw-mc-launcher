@@ -42,7 +42,7 @@ export default function FilterSelect({ value, onChange, options, placeholder = '
         aria-expanded={open}
         aria-controls={listboxId}
         disabled={disabled}
-        className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all whitespace-nowrap select-none bg-gray-800/80 border-gray-700/80 ${
+        className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all whitespace-nowrap select-none outline-none ring-offset-0 bg-gray-800/80 border-gray-700/80 ${
           disabled ? 'opacity-50 cursor-not-allowed' : 'hover:bg-gray-800'
         } ${open ? 'border-purple-500/50 ring-1 ring-purple-500/20' : ''} ${
           isDefault ? 'text-gray-500' : 'text-gray-200'

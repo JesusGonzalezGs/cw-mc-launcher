@@ -26,6 +26,13 @@ function formatDownloads(n: number): string {
   return String(n)
 }
 
+function formatFileSize(bytes?: number): string {
+  if (!bytes) return '—'
+  if (bytes >= 1_048_576) return `${(bytes / 1_048_576).toFixed(1)} MB`
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`
+  return `${bytes} B`
+}
+
 function formatDate(s?: string): string {
   if (!s) return '—'
   return new Date(s).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -338,6 +345,19 @@ export default function ModpackDetailPage() {
                 </div>
               )}
 
+              {modAny.categories?.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {(modAny.categories as any[]).slice(0, 6).map((cat: any) => (
+                    <span key={cat.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border bg-orange-500/10 text-orange-300 border-orange-500/20 font-medium">
+                      {cat.iconUrl && (
+                        <img src={cat.iconUrl} alt="" className="w-3 h-3 object-contain opacity-80" />
+                      )}
+                      {cat.name}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               {(loaderNums.length > 0 || mcVersions.length > 0) && (
                 <div className="flex flex-wrap gap-1.5 mb-4">
                   {loaderNums.map((l) => LOADER_NAMES[l] && (
@@ -546,6 +566,7 @@ export default function ModpackDetailPage() {
                           <th className="pb-3 text-left font-semibold">Nombre</th>
                           <th className="pb-3 text-left font-semibold">Versión MC</th>
                           <th className="pb-3 text-left font-semibold">Loader</th>
+                          <th className="pb-3 text-left font-semibold">Tamaño</th>
                           <th className="pb-3 text-left font-semibold">Fecha</th>
                           <th className="pb-3 text-right font-semibold">Acción</th>
                         </tr>
@@ -579,6 +600,9 @@ export default function ModpackDetailPage() {
                                 ) : (
                                   <span className="text-xs text-gray-600">—</span>
                                 )}
+                              </td>
+                              <td className="py-3 pr-4 whitespace-nowrap text-xs text-gray-500">
+                                {formatFileSize((file as any).fileLength)}
                               </td>
                               <td className="py-3 pr-4 whitespace-nowrap text-xs text-gray-500">
                                 {formatDate(file.fileDate)}

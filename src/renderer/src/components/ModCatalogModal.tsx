@@ -151,7 +151,7 @@ function ModCard({ mod, installing, installed, error, onInstall, onDetail, versi
   return (
     <div
       onClick={onDetail}
-      className="rounded-2xl border flex flex-col transition-all cursor-pointer bg-gradient-to-br from-gray-700 via-purple-900/20 to-gray-800 border-purple-500/25 hover:border-purple-500/50 hover:shadow-lg hover:shadow-purple-900/20 hover:-translate-y-0.5"
+      className="rounded-2xl border flex flex-col transition-all cursor-pointer bg-gradient-to-br from-[#1e1a2e] to-[#161320] border-purple-500/35 hover:border-purple-400/60 hover:shadow-lg hover:shadow-purple-900/30 hover:-translate-y-0.5"
     >
       <div className="p-3 flex items-start gap-3 flex-1">
         {mod.logo?.thumbnailUrl ? (
@@ -181,10 +181,10 @@ function ModCard({ mod, installing, installed, error, onInstall, onDetail, versi
       </div>
 
       <div
-        className="flex items-center justify-between px-3 py-2.5 border-t border-purple-500/10"
+        className="flex items-center justify-between px-3 py-2.5 border-t border-gray-700/50"
         onClick={e => e.stopPropagation()}
       >
-        <span className="text-xs flex items-center gap-1 text-gray-600">
+        <span className="text-xs flex items-center gap-1 text-gray-500">
           <Download size={10} />
           {formatDownloads(mod.downloadCount)}
         </span>
@@ -356,7 +356,7 @@ function ModDetailView({ mod, installing, installed, installError, onInstall, on
       <div className="flex-1 overflow-y-auto custom-scrollbar">
 
         {/* Hero */}
-        <div className="relative px-5 py-5 border-b border-purple-500/15 bg-purple-950/20">
+        <div className="relative px-5 py-5 border-b border-purple-500/25 bg-[#1a1628]">
           <div className="flex items-start gap-4">
             {mod.logo?.url || mod.logo?.thumbnailUrl ? (
               <img
@@ -649,7 +649,7 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
       <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" onClick={onClose} />
       <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none p-3 md:p-6">
         <div
-          className="w-full max-w-5xl h-full max-h-[92vh] rounded-2xl shadow-2xl border pointer-events-auto flex flex-col bg-gradient-to-br from-gray-900 via-purple-950/30 to-[#0a0a14] border-purple-500/30"
+          className="w-full max-w-5xl h-full max-h-[92vh] rounded-2xl shadow-2xl border pointer-events-auto flex flex-col bg-[#13111f] border-purple-500/40"
           onClick={e => e.stopPropagation()}
         >
 
