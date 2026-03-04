@@ -109,16 +109,28 @@ export async function downloadVersionFiles(
     })
   })
 
+  const currentOs = isWindows ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux'
   let libsDone = 0
   for (const lib of validLibs) {
+    // Descargar artefacto principal
     const artifact = lib.downloads?.artifact
-    if (!artifact) { libsDone++; continue }
+    if (artifact) {
+      const libPath = path.join(librariesDir, artifact.path)
+      fs.mkdirSync(path.dirname(libPath), { recursive: true })
+      if (needsDownload(libPath, artifact.sha1)) {
+        await downloadFile(artifact.url, libPath)
+      }
+    }
 
-    const libPath = path.join(librariesDir, artifact.path)
-    fs.mkdirSync(path.dirname(libPath), { recursive: true })
-
-    if (needsDownload(libPath, artifact.sha1)) {
-      await downloadFile(artifact.url, libPath)
+    // Descargar JAR de nativos (classifiers) para el OS actual
+    const nativeKey = lib.natives?.[currentOs]?.replace('${arch}', process.arch === 'x64' ? '64' : '32')
+    if (nativeKey && lib.downloads?.classifiers?.[nativeKey]) {
+      const native = lib.downloads.classifiers[nativeKey]
+      const nativePath = path.join(librariesDir, native.path)
+      fs.mkdirSync(path.dirname(nativePath), { recursive: true })
+      if (needsDownload(nativePath, native.sha1)) {
+        await downloadFile(native.url, nativePath)
+      }
     }
 
     libsDone++

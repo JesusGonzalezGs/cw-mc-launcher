@@ -73,6 +73,7 @@ export interface CfFile {
   fileName: string
   displayName: string
   gameVersions: string[]
+  sortableGameVersions?: { gameVersionName: string; gameVersionTypeId?: number }[]
   downloadCount: number
   fileDate: string
   downloadUrl?: string

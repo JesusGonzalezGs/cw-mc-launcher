@@ -15,6 +15,7 @@ declare global {
         getStatus: () => Promise<any[]>
         download: (version: number) => Promise<any>
         pollStatus: () => Promise<any[]>
+        getForMcVersion: (mcVersion: string) => Promise<any>
       }
       auth: {
         loginMsa: () => Promise<any>
@@ -34,9 +35,12 @@ declare global {
         stop: (id: string) => Promise<any>
         launch: (instance: any) => Promise<any>
         getMods: (id: string) => Promise<string[]>
+        getModsMeta: (id: string) => Promise<any>
         toggleMod: (id: string, filename: string) => Promise<string>
         removeMod: (id: string, filename: string) => Promise<any>
         installMod: (instanceId: string, modId: number, fileId: number) => Promise<any>
+        installModWithDeps: (instanceId: string, modId: number, fileId: number) => Promise<any>
+        identifyMods: (instanceId: string) => Promise<any>
       }
       mc: {
         getVersionManifest: () => Promise<any>
@@ -61,6 +65,8 @@ declare global {
         getModDescription: (modId: number) => Promise<string>
         getModFiles: (modId: number, gameVersion?: string, loaderType?: number) => Promise<any>
         installModpack: (modpackId: number, fileId: number, name: string, logoUrl?: string, fileVersion?: string) => Promise<any>
+        getFileDetails: (modId: number, fileId: number) => Promise<any>
+        getDownloadUrl: (modId: number, fileId: number) => Promise<string>
       }
       settings: {
         get: () => Promise<any>

@@ -52,9 +52,11 @@ import {
   cfGetModDescription,
   cfGetModFiles,
   cfGetDownloadUrl,
+  cfGetFileDetails,
   cfGetCategories,
 } from './services/curseforgeService'
 import { installCurseForgeModpack } from './services/modpackInstaller'
+import { installModWithDeps, readModsJson, removeModMeta, identifyMods } from './services/modManager'
 import { launchInstance, isInstanceRunning, stopInstance } from './services/gameLauncher'
 import { downloadFile } from './utils/downloadHelper'
 import path from 'path'
@@ -96,6 +98,18 @@ export function registerIpcHandlers(): void {
       progress: downloads[v]?.progress ?? 0,
       error: downloads[v]?.error ?? '',
     }))
+  })
+
+  ipcMain.handle('java:getForMcVersion', (_, mcVersion: string) => {
+    const version = getMcJavaVersion(mcVersion)
+    const downloads = getJavaDownloads()
+    return {
+      version,
+      ready: isJavaReady(version),
+      status: downloads[version]?.status ?? 'idle',
+      progress: downloads[version]?.progress ?? 0,
+      error: downloads[version]?.error ?? '',
+    }
   })
 
   // ── Auth ─────────────────────────────────────────────────────────────────────
@@ -179,7 +193,27 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('instances:removeMod', (_, id: string, filename: string) => {
     removeMod(id, filename)
+    removeModMeta(id, filename)
     return { ok: true }
+  })
+
+  ipcMain.handle('instances:getModsMeta', (_, instanceId: string) => readModsJson(instanceId))
+
+  ipcMain.handle('instances:identifyMods', async (_, instanceId: string) => {
+    const win = getMainWindow()
+    await identifyMods(instanceId, (msg) => {
+      win?.webContents.send('mod:installProgress', { instanceId, msg })
+    })
+    return { ok: true }
+  })
+
+  ipcMain.handle('instances:installModWithDeps', async (_, instanceId: string, modId: number, fileId: number) => {
+    const inst = getInstance(instanceId)
+    if (!inst) throw new Error(`Instancia ${instanceId} no encontrada`)
+    const win = getMainWindow()
+    return installModWithDeps(instanceId, modId, fileId, inst.mcVersion, inst.modLoader, (msg) => {
+      win?.webContents.send('mod:installProgress', { instanceId, msg })
+    })
   })
 
   ipcMain.handle('instances:installMod', async (_, instanceId: string, modId: number, fileId: number) => {
@@ -257,6 +291,8 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('cf:getCategories', () => cfGetCategories(4471))
 
   ipcMain.handle('cf:getMod', (_, modId: number) => cfGetMod(modId))
+
+  ipcMain.handle('cf:getFileDetails', (_, modId: number, fileId: number) => cfGetFileDetails(modId, fileId))
 
   ipcMain.handle('cf:getModDescription', (_, modId: number) => cfGetModDescription(modId))
 

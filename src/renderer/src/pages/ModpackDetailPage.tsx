@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Download, Loader2, AlertCircle, Check } from 'lucide-react'
+import { ArrowLeft, Download, Loader2, AlertCircle, Check, Search, Tag, Layers } from 'lucide-react'
 import ProgressBar from '../components/ProgressBar'
 import Modal from '../components/common/Modal'
+import FilterSelect from '../components/common/FilterSelect'
 import type { CfMod, CfFile, InstallProgress } from '../types'
 import { useInstall } from '../context/InstallContext'
 
@@ -28,6 +29,34 @@ function formatDownloads(n: number): string {
 function formatDate(s?: string): string {
   if (!s) return '—'
   return new Date(s).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
+}
+
+function getFileMcVersions(file: CfFile): string[] {
+  const fromGV = (file.gameVersions ?? []).filter((v) => /^\d+\.\d+/.test(v))
+  if (fromGV.length > 0) return fromGV
+  return (file.sortableGameVersions ?? [])
+    .map((e) => e.gameVersionName ?? '')
+    .filter((v) => /^\d+\.\d+/.test(v))
+}
+
+function getFileLoader(file: CfFile): number | null {
+  // Newer CF files include the loader name directly in gameVersions
+  const gv = file.gameVersions ?? []
+  if (gv.includes('NeoForge')) return 6
+  if (gv.includes('Forge')) return 1
+  if (gv.includes('Fabric')) return 4
+  if (gv.includes('Quilt')) return 5
+
+  // Older CF files have the loader only in sortableGameVersions.gameVersionName
+  // (e.g. "Forge-14.23.5.2860", "Fabric-0.14.21", etc.)
+  for (const entry of file.sortableGameVersions ?? []) {
+    const name = (entry.gameVersionName ?? '').toLowerCase()
+    if (name.includes('neoforge')) return 6
+    if (name.includes('forge')) return 1
+    if (name.includes('fabric')) return 4
+    if (name.includes('quilt')) return 5
+  }
+  return null
 }
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -64,6 +93,9 @@ export default function ModpackDetailPage() {
   const [installModal, setInstallModal] = useState<{ fileId: number } | null>(null)
   const [modalName, setModalName] = useState('')
   const [modalNameError, setModalNameError] = useState('')
+  const [versionSearch, setVersionSearch] = useState('')
+  const [versionMcFilter, setVersionMcFilter] = useState('')
+  const [versionLoaderFilter, setVersionLoaderFilter] = useState('')
 
   useEffect(() => {
     window.launcher.instances.list().then((list: any[]) => {
@@ -174,6 +206,25 @@ export default function ModpackDetailPage() {
   )]
 
   const isSelectedInstalled = selectedFileId !== null && installedFileIds.has(selectedFileId)
+
+  // ── Version filters ────────────────────────────────────────────────────────
+
+  const availableMcVersions = [...new Set(
+    files.flatMap((f) => (f.gameVersions ?? []).filter((v) => /^\d+\.\d+/.test(v)))
+  )].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+
+  const availableLoaders = [...new Set(
+    files.map(getFileLoader).filter((l): l is number => l !== null)
+  )]
+
+  const filteredFiles = files.filter((f) => {
+    if (versionSearch && !(f.displayName ?? f.fileName).toLowerCase().includes(versionSearch.toLowerCase())) return false
+    if (versionMcFilter && !(f.gameVersions ?? []).includes(versionMcFilter)) return false
+    if (versionLoaderFilter && getFileLoader(f) !== Number(versionLoaderFilter)) return false
+    return true
+  })
+
+  const hasVersionFilters = !!versionSearch || !!versionMcFilter || !!versionLoaderFilter
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'descripcion', label: 'Descripción' },
@@ -390,60 +441,127 @@ export default function ModpackDetailPage() {
           {/* Versiones */}
           {tab === 'versiones' && (
             files.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-xs uppercase tracking-widest border-b text-gray-500 border-gray-700/60">
-                      <th className="pb-3 text-left font-semibold">Nombre</th>
-                      <th className="pb-3 text-left font-semibold">Versión MC</th>
-                      <th className="pb-3 text-left font-semibold">Fecha</th>
-                      <th className="pb-3 text-right font-semibold">Acción</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-700/40">
-                    {files.map((file) => (
-                      <tr key={file.id} className="transition-colors hover:bg-purple-500/5">
-                        <td className="py-3 pr-4">
-                          <span className="line-clamp-1 text-xs font-medium text-gray-200">
-                            {file.displayName || file.fileName}
-                          </span>
-                        </td>
-                        <td className="py-3 pr-4">
-                          <div className="flex flex-wrap gap-1">
-                            {(file.gameVersions ?? [])
-                              .filter((v) => /^\d+\.\d+/.test(v))
-                              .slice(0, 3)
-                              .map((v) => (
-                                <span key={v} className="px-1.5 py-0.5 rounded-lg text-xs border font-mono bg-indigo-500/10 text-indigo-300 border-indigo-500/20">
-                                  {v}
+              <div>
+                {/* Filter bar */}
+                <div className="flex flex-col sm:flex-row gap-2 mb-4">
+                  <div className="relative flex-1">
+                    <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    <input
+                      type="text"
+                      value={versionSearch}
+                      onChange={(e) => setVersionSearch(e.target.value)}
+                      placeholder="Buscar versión..."
+                      className="w-full bg-gray-800/80 border border-gray-700/80 rounded-xl pl-8 pr-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                    />
+                  </div>
+                  {availableMcVersions.length > 0 && (
+                    <FilterSelect
+                      icon={Tag}
+                      value={versionMcFilter}
+                      onChange={setVersionMcFilter}
+                      placeholder="Todas las versiones"
+                      options={[
+                        { value: '', label: 'Todas las versiones' },
+                        ...availableMcVersions.map((v) => ({ value: v, label: v })),
+                      ]}
+                    />
+                  )}
+                  {availableLoaders.length > 1 && (
+                    <FilterSelect
+                      icon={Layers}
+                      value={versionLoaderFilter}
+                      onChange={setVersionLoaderFilter}
+                      placeholder="Todos los loaders"
+                      options={[
+                        { value: '', label: 'Todos los loaders' },
+                        ...availableLoaders.map((l) => ({ value: String(l), label: LOADER_NAMES[l] ?? `Loader ${l}` })),
+                      ]}
+                    />
+                  )}
+                  {hasVersionFilters && (
+                    <button
+                      onClick={() => { setVersionSearch(''); setVersionMcFilter(''); setVersionLoaderFilter('') }}
+                      className="px-3 py-2 rounded-xl text-xs border border-gray-700 text-gray-400 hover:bg-gray-700/50 transition-colors whitespace-nowrap"
+                    >
+                      Limpiar
+                    </button>
+                  )}
+                </div>
+
+                {filteredFiles.length === 0 ? (
+                  <p className="text-sm text-gray-500 py-4 text-center">No hay versiones que coincidan con los filtros.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    {hasVersionFilters && (
+                      <p className="text-xs text-gray-500 mb-3">{filteredFiles.length} de {files.length} versiones</p>
+                    )}
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="text-xs uppercase tracking-widest border-b text-gray-500 border-gray-700/60">
+                          <th className="pb-3 text-left font-semibold">Nombre</th>
+                          <th className="pb-3 text-left font-semibold">Versión MC</th>
+                          <th className="pb-3 text-left font-semibold">Loader</th>
+                          <th className="pb-3 text-left font-semibold">Fecha</th>
+                          <th className="pb-3 text-right font-semibold">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-700/40">
+                        {filteredFiles.map((file) => {
+                          const loaderNum = getFileLoader(file) ?? (loaderNums.length === 1 ? loaderNums[0] : null)
+                          const fileMcVers = getFileMcVersions(file)
+                          const displayMcVers = fileMcVers.length > 0 ? fileMcVers : (mcVersions.length === 1 ? mcVersions : [])
+                          return (
+                            <tr key={file.id} className="transition-colors hover:bg-purple-500/5">
+                              <td className="py-3 pr-4">
+                                <span className="line-clamp-1 text-xs font-medium text-gray-200">
+                                  {file.displayName || file.fileName}
                                 </span>
-                              ))}
-                          </div>
-                        </td>
-                        <td className="py-3 pr-4 whitespace-nowrap text-xs text-gray-500">
-                          {formatDate(file.fileDate)}
-                        </td>
-                        <td className="py-3 text-right">
-                          {installedFileIds.has(file.id) ? (
-                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-green-500/10 border border-green-500/25 text-green-400">
-                              <Check size={11} />
-                              Instalado
-                            </span>
-                          ) : (
-                            <button
-                              onClick={() => openInstallModal(file.id)}
-                              disabled={isFileInstalling(file.id)}
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-sm"
-                            >
-                              {isFileInstalling(file.id) ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
-                              {isFileInstalling(file.id) ? 'Instalando...' : 'Instalar'}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                              </td>
+                              <td className="py-3 pr-4">
+                                <div className="flex flex-wrap gap-1">
+                                  {displayMcVers.slice(0, 3).map((v) => (
+                                    <span key={v} className="px-1.5 py-0.5 rounded-lg text-xs border font-mono bg-indigo-500/10 text-indigo-300 border-indigo-500/20">
+                                      {v}
+                                    </span>
+                                  ))}
+                                </div>
+                              </td>
+                              <td className="py-3 pr-4">
+                                {loaderNum !== null && LOADER_NAMES[loaderNum] ? (
+                                  <span className={`px-1.5 py-0.5 rounded-full text-xs border ${LOADER_COLORS[loaderNum] ?? 'bg-gray-500/15 text-gray-300 border-gray-500/25'}`}>
+                                    {LOADER_NAMES[loaderNum]}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-gray-600">—</span>
+                                )}
+                              </td>
+                              <td className="py-3 pr-4 whitespace-nowrap text-xs text-gray-500">
+                                {formatDate(file.fileDate)}
+                              </td>
+                              <td className="py-3 text-right">
+                                {installedFileIds.has(file.id) ? (
+                                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-green-500/10 border border-green-500/25 text-green-400">
+                                    <Check size={11} />
+                                    Instalado
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => openInstallModal(file.id)}
+                                    disabled={isFileInstalling(file.id)}
+                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-sm"
+                                  >
+                                    {isFileInstalling(file.id) ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                                    {isFileInstalling(file.id) ? 'Instalando...' : 'Instalar'}
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             ) : (
               <p className="text-sm text-gray-500">No hay versiones disponibles.</p>

@@ -8,6 +8,7 @@ const ALLOWED_EVENTS = [
   'mc:downloadProgress',
   'loaders:progress',
   'cf:installProgress',
+  'mod:installProgress',
 ] as const
 
 contextBridge.exposeInMainWorld('launcher', {
@@ -23,6 +24,7 @@ contextBridge.exposeInMainWorld('launcher', {
     getStatus: () => ipcRenderer.invoke('java:getStatus'),
     download: (version: number) => ipcRenderer.invoke('java:download', version),
     pollStatus: () => ipcRenderer.invoke('java:pollStatus'),
+    getForMcVersion: (mcVersion: string) => ipcRenderer.invoke('java:getForMcVersion', mcVersion),
   },
 
   // ── Auth ────────────────────────────────────────────────────────────────────
@@ -46,10 +48,15 @@ contextBridge.exposeInMainWorld('launcher', {
     stop: (id: string) => ipcRenderer.invoke('instances:stop', id),
     launch: (instance: any) => ipcRenderer.invoke('instances:launch', instance),
     getMods: (id: string) => ipcRenderer.invoke('instances:getMods', id),
+    getModsMeta: (id: string) => ipcRenderer.invoke('instances:getModsMeta', id),
     toggleMod: (id: string, filename: string) => ipcRenderer.invoke('instances:toggleMod', id, filename),
     removeMod: (id: string, filename: string) => ipcRenderer.invoke('instances:removeMod', id, filename),
     installMod: (instanceId: string, modId: number, fileId: number) =>
       ipcRenderer.invoke('instances:installMod', instanceId, modId, fileId),
+    installModWithDeps: (instanceId: string, modId: number, fileId: number) =>
+      ipcRenderer.invoke('instances:installModWithDeps', instanceId, modId, fileId),
+    identifyMods: (instanceId: string) =>
+      ipcRenderer.invoke('instances:identifyMods', instanceId),
   },
 
   // ── Minecraft ────────────────────────────────────────────────────────────────
@@ -77,6 +84,7 @@ contextBridge.exposeInMainWorld('launcher', {
     searchMods: (params: any) => ipcRenderer.invoke('cf:searchMods', params),
     getCategories: () => ipcRenderer.invoke('cf:getCategories'),
     getMod: (modId: number) => ipcRenderer.invoke('cf:getMod', modId),
+    getFileDetails: (modId: number, fileId: number) => ipcRenderer.invoke('cf:getFileDetails', modId, fileId),
     getModDescription: (modId: number) => ipcRenderer.invoke('cf:getModDescription', modId),
     getModFiles: (modId: number, gameVersion?: string, loaderType?: number) =>
       ipcRenderer.invoke('cf:getModFiles', modId, gameVersion, loaderType),

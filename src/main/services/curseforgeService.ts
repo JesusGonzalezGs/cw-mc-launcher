@@ -109,13 +109,30 @@ export async function cfGetModDescription(modId: number): Promise<string> {
 }
 
 export async function cfGetModFiles(modId: number, gameVersion?: string, modLoaderType?: number) {
-  const p = new URLSearchParams({ pageSize: '20' })
-  if (gameVersion) p.set('gameVersion', gameVersion)
-  if (modLoaderType) p.set('modLoaderType', String(modLoaderType))
+  const PAGE_SIZE = 50
+  const allFiles: any[] = []
+  let index = 0
 
-  const resp = await fetch(`${CF_BASE}/mods/${modId}/files?${p}`, { headers: cfHeaders() })
-  if (!resp.ok) throw new Error(`CurseForge getFiles error: ${resp.status}`)
-  return resp.json()
+  while (true) {
+    const p = new URLSearchParams({ pageSize: String(PAGE_SIZE), index: String(index) })
+    if (gameVersion) p.set('gameVersion', gameVersion)
+    if (modLoaderType) p.set('modLoaderType', String(modLoaderType))
+
+    const resp = await fetch(`${CF_BASE}/mods/${modId}/files?${p}`, { headers: cfHeaders() })
+    if (!resp.ok) throw new Error(`CurseForge getFiles error: ${resp.status}`)
+    const json: any = await resp.json()
+
+    const batch: any[] = json.data ?? []
+    allFiles.push(...batch)
+
+    const pagination = json.pagination
+    const totalCount: number = pagination?.totalCount ?? 0
+    index += batch.length
+
+    if (index >= totalCount || batch.length === 0) break
+  }
+
+  return { data: allFiles }
 }
 
 export async function cfGetDownloadUrl(modId: number, fileId: number): Promise<string> {
@@ -130,5 +147,15 @@ export async function cfGetDownloadUrl(modId: number, fileId: number): Promise<s
 export async function cfGetFileDetails(modId: number, fileId: number) {
   const resp = await fetch(`${CF_BASE}/mods/${modId}/files/${fileId}`, { headers: cfHeaders() })
   if (!resp.ok) throw new Error(`CurseForge fileDetails error: ${resp.status}`)
+  return resp.json()
+}
+
+export async function cfGetFingerprintMatches(fingerprints: number[]) {
+  const resp = await fetch(`${CF_BASE}/fingerprints`, {
+    method: 'POST',
+    headers: cfHeaders(),
+    body: JSON.stringify({ fingerprints }),
+  })
+  if (!resp.ok) throw new Error(`CurseForge fingerprints error: ${resp.status}`)
   return resp.json()
 }

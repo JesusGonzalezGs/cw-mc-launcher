@@ -6,6 +6,7 @@ import fs from 'fs'
 import path from 'path'
 import { spawn, ChildProcess } from 'child_process'
 import { BrowserWindow } from 'electron'
+import * as unzipper from 'unzipper'
 import { getSettings, getAccounts } from '../store'
 import { getMcJavaVersion, getJavaExe, isJavaReady } from './javaManager'
 import { isWindows } from '../utils/platform'
@@ -60,6 +61,86 @@ function bridgeNeoForgeSrgJar(versionJson: any, librariesDir: string, versionId:
   }
 }
 
+/**
+ * Extrae las librerías nativas de los JARs de natives al directorio nativesDir.
+ * Solo extrae si el directorio está vacío (para no re-extraer en cada arranque).
+ */
+async function extractNatives(versionJson: any, librariesDir: string, nativesDir: string): Promise<void> {
+  const currentOs = isWindows ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux'
+
+  const nativeJars: string[] = []
+
+  for (const lib of versionJson.libraries ?? []) {
+    // Comprobar reglas OS
+    if (lib.rules) {
+      const allowed = lib.rules.some((rule: any) => {
+        if (rule.action !== 'allow') return false
+        if (!rule.os) return true
+        return rule.os.name === currentOs
+      })
+      if (!allowed) continue
+    }
+
+    // Método 1: downloads.classifiers con natives-{os}
+    const nativeKey = lib.natives?.[currentOs]?.replace('${arch}', process.arch === 'x64' ? '64' : '32')
+    if (nativeKey && lib.downloads?.classifiers?.[nativeKey]) {
+      const classifier = lib.downloads.classifiers[nativeKey]
+      const jarPath = path.join(librariesDir, classifier.path)
+      if (!fs.existsSync(jarPath) && classifier.url) {
+        // El JAR nativo no fue descargado durante la instalación — descargarlo ahora
+        fs.mkdirSync(path.dirname(jarPath), { recursive: true })
+        const resp = await fetch(classifier.url)
+        if (resp.ok) {
+          const buf = Buffer.from(await resp.arrayBuffer())
+          fs.writeFileSync(jarPath, buf)
+        }
+      }
+      if (fs.existsSync(jarPath)) nativeJars.push(jarPath)
+      continue
+    }
+
+    // Método 2: el propio artifact tiene "natives-windows" en el nombre (lwjgl3, etc.)
+    if (lib.downloads?.artifact?.path) {
+      const p = lib.downloads.artifact.path as string
+      if (p.includes(`natives-${currentOs}`) || p.includes('natives-windows') && currentOs === 'windows') {
+        const jarPath = path.join(librariesDir, p)
+        if (fs.existsSync(jarPath)) nativeJars.push(jarPath)
+      }
+    }
+  }
+
+  if (nativeJars.length === 0) return
+
+  // Solo re-extraer si el directorio está vacío
+  const existing = fs.readdirSync(nativesDir)
+  if (existing.length > 0) return
+
+  for (const jarPath of nativeJars) {
+    await new Promise<void>((resolve, reject) => {
+      fs.createReadStream(jarPath)
+        .pipe(unzipper.Parse())
+        .on('entry', (entry: any) => {
+          const fileName: string = entry.path
+          // Excluir META-INF y directorios
+          if (fileName.startsWith('META-INF') || fileName.endsWith('/')) {
+            entry.autodrain()
+            return
+          }
+          // Solo extraer archivos nativos relevantes
+          const ext = path.extname(fileName).toLowerCase()
+          if (!['.dll', '.so', '.dylib', '.jnilib'].includes(ext)) {
+            entry.autodrain()
+            return
+          }
+          const outPath = path.join(nativesDir, path.basename(fileName))
+          entry.pipe(fs.createWriteStream(outPath)).on('error', reject)
+        })
+        .on('close', resolve)
+        .on('error', reject)
+    })
+  }
+}
+
 function resolveJavaExe(mcVersion: string): string {
   const ver = getMcJavaVersion(mcVersion)
   if (isJavaReady(ver)) return getJavaExe(ver)
@@ -76,7 +157,7 @@ function mavenCoordToRelPath(name: string): string {
   return path.join(groupPath, artifactId, version, `${artifactId}-${version}${classifier}.jar`)
 }
 
-function buildClasspath(versionJson: any, settings: ReturnType<typeof getSettings>): string {
+function buildClasspath(versionJson: any, settings: ReturnType<typeof getSettings>, resolvedVersionId: string): string {
   const librariesDir = path.join(settings.assetsDir, '..', 'libraries')
   const versionsDir = path.join(settings.assetsDir, '..', 'versions')
   const sep = isWindows ? ';' : ':'
@@ -102,11 +183,19 @@ function buildClasspath(versionJson: any, settings: ReturnType<typeof getSetting
     }
   }
 
-  // Agregar el client.jar
-  const clientJar = path.join(versionsDir, versionJson.id, `${versionJson.id}.jar`)
-  if (fs.existsSync(clientJar)) jars.push(clientJar)
+  // El client.jar vanilla se necesita SIEMPRE salvo en Forge/NeoForge modernos,
+  // que incluyen su propio cliente parcheado. El Forge antiguo (launchwrapper, ≤1.12.2)
+  // también necesita el jar vanilla porque parchea clases en memoria en tiempo de ejecución.
+  const isForgeVariant = resolvedVersionId.toLowerCase().includes('forge')
+  const usesLaunchWrapper = (versionJson.libraries ?? []).some(
+    (lib: any) => typeof lib.name === 'string' && lib.name.includes('launchwrapper')
+  )
+  if (!isForgeVariant || usesLaunchWrapper) {
+    const clientJar = path.join(versionsDir, versionJson.id, `${versionJson.id}.jar`)
+    if (fs.existsSync(clientJar)) jars.push(clientJar)
+  }
 
-  return jars.filter((j) => fs.existsSync(j)).join(sep)
+  return [...new Set(jars)].filter((j) => fs.existsSync(j)).join(sep)
 }
 
 function resolveArg(arg: any, vars: Record<string, string>, features: Record<string, boolean> = {}): string[] {
@@ -174,12 +263,15 @@ export async function launchInstance(
   // NeoForge: bridge minecraft-client-patched.jar → client-srg.jar if needed
   bridgeNeoForgeSrgJar(effectiveJson, path.join(settings.assetsDir, '..', 'libraries'), instance.resolvedVersionId)
 
+  // Extraer librerías nativas al directorio natives
+  const librariesDir = path.resolve(path.join(settings.assetsDir, '..', 'libraries'))
+  await extractNatives(effectiveJson, librariesDir, nativesDir)
+
   const javaExe = resolveJavaExe(instance.mcVersion)
-  const classpath = buildClasspath(effectiveJson, settings)
+  const classpath = buildClasspath(effectiveJson, settings, instance.resolvedVersionId)
   const mainClass = effectiveJson.mainClass
 
   const assetIndex = effectiveJson.assetIndex?.id ?? effectiveJson.assets ?? instance.mcVersion
-  const librariesDir = path.resolve(path.join(settings.assetsDir, '..', 'libraries'))
 
   const vars: Record<string, string> = {
     auth_player_name: account.username,
@@ -195,6 +287,7 @@ export async function launchInstance(
     launcher_name: 'cw-mc-launcher',
     launcher_version: '0.1.0',
     classpath,
+    classpath_separator: isWindows ? ';' : ':',
     library_directory: librariesDir,
   }
 
@@ -282,10 +375,14 @@ function mergeVersionJsons(parent: any, child: any): any {
   if (child.assetIndex) merged.assetIndex = child.assetIndex
   if (child.type) merged.type = child.type
 
+  // Formato antiguo (pre-1.13): child tiene minecraftArguments con el tweaker de Forge incluido.
+  // Si child lo define, debe reemplazar al del parent porque ya es el conjunto completo.
+  if (child.minecraftArguments) merged.minecraftArguments = child.minecraftArguments
+
   // Fusionar libraries
   merged.libraries = [...(child.libraries ?? []), ...(parent.libraries ?? [])]
 
-  // Fusionar arguments
+  // Fusionar arguments (formato nuevo, 1.13+)
   if (child.arguments) {
     merged.arguments = {
       jvm: [...(child.arguments.jvm ?? []), ...(parent.arguments?.jvm ?? [])],
