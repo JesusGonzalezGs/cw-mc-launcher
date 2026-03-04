@@ -4,7 +4,7 @@ import { ArrowLeft, Download, Loader2, AlertCircle, Check, Search, Tag, Layers }
 import ProgressBar from '../components/ProgressBar'
 import Modal from '../components/common/Modal'
 import FilterSelect from '../components/common/FilterSelect'
-import type { CfMod, CfFile, InstallProgress } from '../types'
+import type { CfMod, CfFile } from '../types'
 import { useInstall } from '../context/InstallContext'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -77,14 +77,14 @@ type Tab = 'descripcion' | 'screenshots' | 'versiones'
 export default function ModpackDetailPage() {
   const { modpackId } = useParams<{ modpackId: string }>()
   const navigate = useNavigate()
-  const { startInstall, finishInstall, installing: activeInstalls } = useInstall()
+  const { startInstall, finishInstall, installing: activeInstalls, progress } = useInstall()
   const [mod, setMod] = useState<CfMod | null>(null)
   const [description, setDescription] = useState('')
   const [files, setFiles] = useState<CfFile[]>([])
   const [selectedFileId, setSelectedFileId] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
+  const isAnyInstalling = activeInstalls.length > 0
   const isFileInstalling = (fileId: number) => activeInstalls.some((i) => i.fileId === fileId)
-  const [progress, setProgress] = useState<InstallProgress | null>(null)
   const [done, setDone] = useState(false)
   const [error, setError] = useState('')
   const [tab, setTab] = useState<Tab>('descripcion')
@@ -119,11 +119,6 @@ export default function ModpackDetailPage() {
     }).catch((e) => setError(e.message)).finally(() => setLoading(false))
   }, [modpackId])
 
-  useEffect(() => {
-    const handleProgress = (p: InstallProgress) => setProgress(p)
-    window.launcher.on('cf:installProgress', handleProgress)
-    return () => window.launcher.off('cf:installProgress', handleProgress)
-  }, [])
 
   function openInstallModal(fileId: number) {
     if (installedFileIds.has(fileId)) return
@@ -161,7 +156,7 @@ export default function ModpackDetailPage() {
       finishInstall(installId)
       setTimeout(() => navigate('/instances'), 2000)
     } catch (e: any) {
-      setError(e.message ?? 'Error al instalar el modpack')
+      if (!e?.message?.includes('CANCELLED')) setError(e.message ?? 'Se ha parado la instalación del modpack')
       finishInstall(installId)
     }
   }
@@ -330,11 +325,11 @@ export default function ModpackDetailPage() {
                 {(selectedFileId === null || !isFileInstalling(selectedFileId)) && !done && !isSelectedInstalled && (
                   <button
                     onClick={() => selectedFileId && openInstallModal(selectedFileId)}
-                    disabled={!selectedFileId}
+                    disabled={!selectedFileId || isAnyInstalling}
                     className="self-start flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-lg shadow-purple-900/25 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
                   >
                     <Download size={15} />
-                    Instalar modpack
+                    {isAnyInstalling ? 'Instalación en curso...' : 'Instalar modpack'}
                   </button>
                 )}
 
@@ -547,7 +542,7 @@ export default function ModpackDetailPage() {
                                 ) : (
                                   <button
                                     onClick={() => openInstallModal(file.id)}
-                                    disabled={isFileInstalling(file.id)}
+                                    disabled={isAnyInstalling || isFileInstalling(file.id)}
                                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-sm"
                                   >
                                     {isFileInstalling(file.id) ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}

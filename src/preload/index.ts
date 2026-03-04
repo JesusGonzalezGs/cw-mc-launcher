@@ -91,6 +91,7 @@ contextBridge.exposeInMainWorld('launcher', {
       ipcRenderer.invoke('cf:getModFiles', modId, gameVersion, loaderType),
     installModpack: (modpackId: number, fileId: number, name: string, logoUrl?: string, fileVersion?: string) =>
       ipcRenderer.invoke('cf:installModpack', modpackId, fileId, name, logoUrl, fileVersion),
+    cancelInstall: () => ipcRenderer.invoke('cf:cancelInstall'),
   },
 
   // ── Settings ─────────────────────────────────────────────────────────────────

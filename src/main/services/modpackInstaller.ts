@@ -16,7 +16,7 @@ import {
   installForge,
   installNeoForge,
 } from './modLoaderInstaller'
-import { createInstance, getInstanceDir, getModsDir } from './instanceManager'
+import { createInstance, deleteInstance, getInstanceDir, getModsDir } from './instanceManager'
 import type { Instance } from './instanceManager'
 import type { ModLoader } from './modLoaderInstaller'
 import { identifyMods } from './modManager'
@@ -26,6 +26,12 @@ export interface InstallProgress {
   current: number
   total: number
   percent: number
+}
+
+let activeController: AbortController | null = null
+
+export function cancelInstall(): void {
+  activeController?.abort()
 }
 
 /** Parses "fabric-0.15.11" → { loader: 'fabric', version: '0.15.11' } */
@@ -45,21 +51,41 @@ export async function installCurseForgeModpack(
   onProgress: (p: InstallProgress) => void,
   cfFileVersion?: string
 ): Promise<Instance> {
+  const controller = new AbortController()
+  activeController = controller
+  const { signal } = controller
+
+  const tmpZip = path.join(os.tmpdir(), `cw-mc-modpack-${fileId}.zip`)
+  const tmpExtract = path.join(os.tmpdir(), `cw-mc-modpack-extract-${fileId}`)
+  let instance: Instance | null = null
+
+  const cleanup = () => {
+    try { fs.rmSync(tmpZip, { force: true }) } catch {}
+    try { fs.rmSync(tmpExtract, { recursive: true, force: true }) } catch {}
+    if (instance) {
+      try { deleteInstance(instance.id) } catch {}
+    }
+  }
+
+  const check = () => { if (signal.aborted) throw new Error('CANCELLED') }
+
+  try {
   // 1. Obtener URL de descarga
+  check()
   onProgress({ stage: 'Obteniendo URL del modpack...', current: 0, total: 100, percent: 0 })
   const downloadUrl = await cfGetDownloadUrl(modpackId, fileId)
   if (!downloadUrl) throw new Error('No se pudo obtener la URL del modpack')
 
   // 2. Descargar ZIP
+  check()
   onProgress({ stage: 'Descargando modpack...', current: 0, total: 100, percent: 5 })
-  const tmpZip = path.join(os.tmpdir(), `cw-mc-modpack-${fileId}.zip`)
   await downloadFile(downloadUrl, tmpZip, (p) => {
     onProgress({ stage: 'Descargando modpack...', current: p.downloaded, total: p.total, percent: 5 + Math.round(p.percent * 0.2) })
-  })
+  }, undefined, signal)
 
   // 3. Extraer ZIP
+  check()
   onProgress({ stage: 'Extrayendo modpack...', current: 0, total: 100, percent: 25 })
-  const tmpExtract = path.join(os.tmpdir(), `cw-mc-modpack-extract-${fileId}`)
   fs.mkdirSync(tmpExtract, { recursive: true })
   await extractZip(tmpZip, tmpExtract)
   fs.rmSync(tmpZip, { force: true })
@@ -78,8 +104,9 @@ export async function installCurseForgeModpack(
   const modFiles: { projectID: number; fileID: number }[] = manifest.files ?? []
 
   // 5. Crear instancia
+  check()
   onProgress({ stage: 'Creando instancia...', current: 0, total: 100, percent: 28 })
-  const instance = createInstance({
+  instance = createInstance({
     name: cfName,
     mcVersion,
     modLoader: loader,
@@ -103,6 +130,7 @@ export async function installCurseForgeModpack(
   fs.rmSync(tmpExtract, { recursive: true, force: true })
 
   // 7. Descargar archivos de Minecraft
+  check()
   onProgress({ stage: 'Descargando Minecraft...', current: 0, total: 100, percent: 33 })
   await downloadVersionFiles(mcVersion, (e) => {
     onProgress({ stage: e.stage, current: e.current, total: e.total, percent: 33 + Math.round(e.percent * 0.2) })
@@ -124,17 +152,22 @@ export async function installCurseForgeModpack(
   }
 
   // 9. Descargar mods del manifest
+  check()
   let modsDone = 0
   for (const modEntry of modFiles) {
+    check()
     try {
       const url = await cfGetDownloadUrl(modEntry.projectID, modEntry.fileID)
       if (!url) continue
       const filename = decodeURIComponent(url.split('/').pop() ?? `mod-${modEntry.fileID}.jar`)
       const destPath = path.join(modsDir, filename)
       if (!fs.existsSync(destPath)) {
-        await downloadFile(url, destPath)
+        await downloadFile(url, destPath, undefined, undefined, signal)
       }
-    } catch { /* continuar con el siguiente mod */ }
+    } catch (e: any) {
+      if (e?.message === 'CANCELLED') throw e
+      /* continuar con el siguiente mod */
+    }
 
     modsDone++
     onProgress({
@@ -160,4 +193,14 @@ export async function installCurseForgeModpack(
 
   onProgress({ stage: '¡Instalación completada!', current: 100, total: 100, percent: 100 })
   return updatedInstance
+
+  } catch (err: any) {
+    if (signal.aborted || err?.message === 'CANCELLED') {
+      cleanup()
+      throw new Error('CANCELLED')
+    }
+    throw err
+  } finally {
+    if (activeController === controller) activeController = null
+  }
 }

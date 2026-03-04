@@ -55,7 +55,7 @@ import {
   cfGetFileDetails,
   cfGetCategories,
 } from './services/curseforgeService'
-import { installCurseForgeModpack } from './services/modpackInstaller'
+import { installCurseForgeModpack, cancelInstall } from './services/modpackInstaller'
 import { installModWithDeps, readModsJson, removeModMeta, identifyMods } from './services/modManager'
 import { launchInstance, isInstanceRunning, stopInstance } from './services/gameLauncher'
 import { downloadFile } from './utils/downloadHelper'
@@ -84,7 +84,7 @@ export function registerIpcHandlers(): void {
     }))
   })
 
-  ipcMain.handle('java:download', async (_, version: 8 | 17 | 21) => {
+  ipcMain.handle('java:download', async (_, version: number) => {
     downloadJava(version).catch(console.error)
     return { ok: true }
   })
@@ -101,7 +101,19 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('java:getForMcVersion', (_, mcVersion: string) => {
-    const version = getMcJavaVersion(mcVersion)
+    // Intentar leer el version.json para obtener javaVersion.majorVersion exacto
+    let version = getMcJavaVersion(mcVersion)
+    try {
+      const settings = getSettings()
+      const versionsDir = path.join(settings.assetsDir, '..', 'versions')
+      // Buscar el primer version.json cuyo id empiece por mcVersion
+      const entries = fs.existsSync(versionsDir) ? fs.readdirSync(versionsDir) : []
+      const match = entries.find(e => e === mcVersion || e.startsWith(mcVersion + '-') || e.startsWith(mcVersion + '.'))
+      if (match) {
+        const vj = JSON.parse(fs.readFileSync(path.join(versionsDir, match, `${match}.json`), 'utf-8'))
+        if (vj.javaVersion?.majorVersion) version = vj.javaVersion.majorVersion
+      }
+    } catch { /* ignorar, usar fallback */ }
     const downloads = getJavaDownloads()
     return {
       version,
@@ -307,6 +319,8 @@ export function registerIpcHandlers(): void {
     }, fileVersion)
     return instance
   })
+
+  ipcMain.handle('cf:cancelInstall', () => { cancelInstall() })
 
   // ── Settings ─────────────────────────────────────────────────────────────────
   ipcMain.handle('settings:get', () => getSettings())

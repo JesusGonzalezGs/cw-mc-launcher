@@ -8,6 +8,7 @@ import {
 import type { Instance } from '../types'
 import { LOADER_NAMES } from '../constants'
 import ModCatalogModal from '../components/ModCatalogModal'
+import { getInstanceLogs, appendInstanceLog, clearInstanceLogs } from '../lib/logsStore'
 
 type Tab = 'mods' | 'console' | 'settings'
 
@@ -40,7 +41,7 @@ export default function InstanceDetailPage() {
   const [tab, setTab] = useState<Tab>('mods')
   const [mods, setMods] = useState<string[]>([])
   const [modsMeta, setModsMeta] = useState<Record<string, ModMeta>>({})
-  const [logs, setLogs] = useState<string[]>([])
+  const [logs, setLogs] = useState<string[]>(() => id ? getInstanceLogs(id) : [])
   const [jvmArgs, setJvmArgs] = useState('')
   const [javaInfo, setJavaInfo] = useState<{ version: number; ready: boolean; status: string; progress: number; error: string } | null>(null)
   const [showCatalog, setShowCatalog] = useState(false)
@@ -97,7 +98,8 @@ export default function InstanceDetailPage() {
   useEffect(() => {
     const handleLog = ({ instanceId, line }: any) => {
       if (instanceId !== id) return
-      setLogs((prev) => [...prev.slice(-500), line])
+      appendInstanceLog(id!, line)
+      setLogs(getInstanceLogs(id!))
     }
     const handleStopped = ({ instanceId }: any) => {
       if (instanceId === id) setIsRunning(false)
@@ -127,6 +129,7 @@ export default function InstanceDetailPage() {
   async function handlePlay() {
     if (!instance) return
     setIsRunning(true)
+    clearInstanceLogs(id!)
     setLogs([])
     setTab('console')
     try {

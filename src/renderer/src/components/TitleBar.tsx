@@ -5,7 +5,7 @@ export default function TitleBar() {
   return (
     <div className="flex items-center justify-between h-9 bg-[#0a0a14] border-b border-purple-500/20 drag-region select-none shrink-0">
       <div className="flex items-center gap-2 px-4">
-        <img src="/icon.png" alt="" className="w-5 h-5 rounded-md object-contain" draggable={false} />
+        <img src="./icon.png" alt="" className="w-5 h-5 rounded-md object-contain" draggable={false} />
         <span className="text-gray-500 text-xs font-medium tracking-wide">CW-MC Launcher</span>
       </div>
       <div className="flex no-drag">

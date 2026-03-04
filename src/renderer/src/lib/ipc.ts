@@ -68,6 +68,7 @@ declare global {
         installModpack: (modpackId: number, fileId: number, name: string, logoUrl?: string, fileVersion?: string) => Promise<any>
         getFileDetails: (modId: number, fileId: number) => Promise<any>
         getDownloadUrl: (modId: number, fileId: number) => Promise<string>
+        cancelInstall: () => Promise<void>
       }
       settings: {
         get: () => Promise<any>

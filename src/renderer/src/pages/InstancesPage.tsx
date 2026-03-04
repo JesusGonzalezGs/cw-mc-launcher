@@ -6,7 +6,7 @@ import Modal from '../components/common/Modal'
 import type { Instance } from '../types'
 import { useInstall } from '../context/InstallContext'
 
-function InstallingCard({ name }: { name: string }) {
+function InstallingCard({ name, percent, stage }: { name: string; percent: number; stage: string }) {
   return (
     <div className="rounded-2xl border border-purple-500/30 overflow-hidden flex flex-col shadow-md bg-gradient-to-br from-gray-800/90 via-purple-950/10 to-gray-900">
       <div className="h-28 relative bg-gradient-to-br from-purple-900/50 via-indigo-900/40 to-pink-900/50 flex items-center justify-center">
@@ -14,10 +14,14 @@ function InstallingCard({ name }: { name: string }) {
       </div>
       <div className="p-3 flex-1">
         <p className="text-sm font-semibold text-gray-200 truncate mb-2">{name}</p>
-        <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border bg-purple-500/15 border-purple-500/30 text-purple-300">
-          <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse" />
-          Instalando...
-        </span>
+        <p className="text-xs text-gray-500 truncate mb-2">{stage || 'Preparando...'}</p>
+        <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-300"
+            style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
+          />
+        </div>
+        <p className="text-xs text-gray-600 text-right mt-1">{percent}%</p>
       </div>
     </div>
   )
@@ -25,7 +29,7 @@ function InstallingCard({ name }: { name: string }) {
 
 export default function InstancesPage() {
   const navigate = useNavigate()
-  const { installing } = useInstall()
+  const { installing, progress } = useInstall()
   const prevInstallingCount = useRef(installing.length)
   const [instances, setInstances] = useState<Instance[]>([])
   const installingNames = new Set(installing.map((i) => i.name))
@@ -301,7 +305,7 @@ export default function InstancesPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {installing.map((item) => (
-              <InstallingCard key={item.id} name={item.name} />
+              <InstallingCard key={item.id} name={item.name} percent={progress?.percent ?? 0} stage={progress?.stage ?? ''} />
             ))}
             {visibleInstances.map((inst) => (
               <InstanceCard

@@ -35,8 +35,8 @@ function makeWritable(dirPath: string): void {
   } catch { /* ignorar si el directorio no existe */ }
 }
 
-export function getMcJavaVersion(mcVersion: string): 8 | 17 | 21 {
-  if (!mcVersion || mcVersion === 'Desconocida') return 17
+export function getMcJavaVersion(mcVersion: string): number {
+  if (!mcVersion || mcVersion === 'Desconocida') return 21
   const parts = mcVersion.split('.').map(Number)
   const minor = parts[1] ?? 0
   const patch = parts[2] ?? 0
@@ -60,7 +60,7 @@ export function isJavaReady(majorVersion: number): boolean {
   return fs.existsSync(getJavaExe(majorVersion))
 }
 
-export async function downloadJava(majorVersion: 8 | 17 | 21): Promise<void> {
+export async function downloadJava(majorVersion: number): Promise<void> {
   if (javaDownloads[majorVersion]?.status === 'downloading') return
 
   javaDownloads[majorVersion] = { status: 'downloading', progress: 0, error: '' }

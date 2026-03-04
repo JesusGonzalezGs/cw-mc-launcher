@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react'
-import { LogOut, Download, Check, User, Key, Settings, AlertCircle } from 'lucide-react'
-import type { AppSettings, Account, JavaStatus } from '../types'
-import ProgressBar from '../components/ProgressBar'
+import { LogOut, Check, User, Key, Settings } from 'lucide-react'
+import type { AppSettings, Account } from '../types'
 
 interface Props {
   onAccountChange: (acc: any) => void
@@ -12,28 +11,18 @@ const CARD = 'bg-gradient-to-br from-gray-800/90 via-purple-950/10 to-gray-900 b
 export default function SettingsPage({ onAccountChange }: Props) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
-  const [javaStatuses, setJavaStatuses] = useState<JavaStatus[]>([])
   const [saved, setSaved] = useState(false)
 
   const load = async () => {
-    const [s, accs, javaS] = await Promise.all([
+    const [s, accs] = await Promise.all([
       window.launcher.settings.get(),
       window.launcher.auth.listAccounts(),
-      window.launcher.java.getStatus(),
     ])
     setSettings(s)
     setAccounts(accs)
-    setJavaStatuses(javaS)
   }
 
-  useEffect(() => {
-    load()
-    const interval = setInterval(async () => {
-      const s = await window.launcher.java.pollStatus()
-      setJavaStatuses(s)
-    }, 2000)
-    return () => clearInterval(interval)
-  }, [])
+  useEffect(() => { load() }, [])
 
   async function handleSave() {
     if (!settings) return
@@ -56,14 +45,10 @@ export default function SettingsPage({ onAccountChange }: Props) {
     load()
   }
 
-  async function handleDownloadJava(version: number) {
-    await window.launcher.java.download(version)
-  }
-
   if (!settings) return null
 
   return (
-    <div className="relative">
+    <div className="relative min-h-full">
 
       {/* Decorative blobs */}
       <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">
@@ -124,45 +109,6 @@ export default function SettingsPage({ onAccountChange }: Props) {
             {accounts.length === 0 && (
               <p className="text-gray-600 text-sm py-2">No hay cuentas guardadas.</p>
             )}
-          </div>
-        </section>
-
-        {/* ── Java ─────────────────────────────────────────────────────────── */}
-        <section>
-          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-3">Versiones de Java</h2>
-          <div className="space-y-2">
-            {javaStatuses.map((j) => (
-              <div key={j.version} className={`${CARD} rounded-xl px-4 py-3`}>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-white text-sm font-medium">Java {j.version}</p>
-                    <p className="text-gray-500 text-xs">
-                      {j.ready ? 'Instalado' : j.status === 'downloading' ? 'Descargando...' : 'No instalado'}
-                    </p>
-                  </div>
-                  {j.ready ? (
-                    <div className="flex items-center gap-1.5 text-green-400 bg-green-500/10 border border-green-500/25 px-2.5 py-1 rounded-lg">
-                      <Check size={13} />
-                      <span className="text-xs font-medium">Listo</span>
-                    </div>
-                  ) : j.status !== 'downloading' && (
-                    <button
-                      onClick={() => handleDownloadJava(j.version)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-lg text-xs font-medium transition-all hover:scale-[1.02] active:scale-95 shadow-sm"
-                    >
-                      <Download size={12} />
-                      Descargar
-                    </button>
-                  )}
-                </div>
-                {j.status === 'downloading' && (
-                  <div className="mt-2">
-                    <ProgressBar percent={j.progress} />
-                  </div>
-                )}
-                {j.error && <p className="text-red-400 text-xs mt-1">{j.error}</p>}
-              </div>
-            ))}
           </div>
         </section>
 

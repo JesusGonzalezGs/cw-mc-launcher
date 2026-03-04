@@ -12,9 +12,11 @@ export async function downloadFile(
   url: string,
   destPath: string,
   onProgress?: (p: DownloadProgress) => void,
-  headers?: Record<string, string>
+  headers?: Record<string, string>,
+  signal?: AbortSignal
 ): Promise<string> {
-  await download(url, destPath, onProgress, headers, 0)
+  if (signal?.aborted) throw new Error('CANCELLED')
+  await download(url, destPath, onProgress, headers, 0, signal)
   return destPath
 }
 
@@ -29,12 +31,14 @@ function download(
   destPath: string,
   onProgress: ((p: DownloadProgress) => void) | undefined,
   headers: Record<string, string> | undefined,
-  redirectCount: number
+  redirectCount: number,
+  signal?: AbortSignal
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     if (redirectCount > 10) {
       return reject(new Error(`Demasiadas redirecciones descargando ${url}`))
     }
+    if (signal?.aborted) return reject(new Error('CANCELLED'))
 
     const request = net.request({ method: 'GET', url })
 
@@ -44,29 +48,44 @@ function download(
       }
     }
 
+    let activeStream: ReturnType<typeof createWriteStream> | null = null
+
+    const onAbort = () => {
+      try { request.abort() } catch {}
+      if (activeStream) {
+        activeStream.destroy()
+        activeStream.on('close', () => reject(new Error('CANCELLED')))
+      } else {
+        reject(new Error('CANCELLED'))
+      }
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+
+    const cleanup = () => signal?.removeEventListener('abort', onAbort)
+
     request.on('response', (response) => {
       const status = response.statusCode
 
-      // Follow redirects
       if (status >= 300 && status < 400) {
         const loc = getHeader(response.headers, 'location')
-        if (!loc) return reject(new Error(`Redirección sin Location header desde ${url}`))
-        // Drain the redirect response body
+        if (!loc) { cleanup(); return reject(new Error(`Redirección sin Location header desde ${url}`)) }
         response.on('data', () => {})
         let redirectUrl: string
         try {
           redirectUrl = loc.startsWith('http') ? loc : new URL(loc, url).href
         } catch {
+          cleanup()
           return reject(new Error(`Location header inválido: ${loc}`))
         }
-        download(redirectUrl, destPath, onProgress, headers, redirectCount + 1)
-          .then(resolve)
-          .catch(reject)
+        download(redirectUrl, destPath, onProgress, headers, redirectCount + 1, signal)
+          .then(() => { cleanup(); resolve() })
+          .catch((e) => { cleanup(); reject(e) })
         return
       }
 
       if (status < 200 || status >= 300) {
         response.on('data', () => {})
+        cleanup()
         return reject(new Error(`HTTP ${status} descargando ${url}`))
       }
 
@@ -74,7 +93,8 @@ function download(
       let downloaded = 0
 
       const dest = createWriteStream(destPath)
-      dest.on('error', reject)
+      activeStream = dest
+      dest.on('error', (e) => { cleanup(); reject(e) })
 
       response.on('data', (chunk: Buffer) => {
         downloaded += chunk.length
@@ -83,7 +103,6 @@ function download(
           total,
           percent: total > 0 ? Math.round((downloaded / total) * 100) : 0,
         })
-        // Handle backpressure
         if (!dest.write(chunk)) {
           (response as any).pause()
           dest.once('drain', () => (response as any).resume())
@@ -92,11 +111,13 @@ function download(
 
       response.on('error', (err: Error) => {
         dest.destroy(err)
+        cleanup()
         reject(err)
       })
 
       response.on('end', () => {
         dest.end(() => {
+          cleanup()
           if (total > 0 && downloaded < total) {
             reject(new Error(`Descarga incompleta de ${url}: ${downloaded} de ${total} bytes`))
           } else {
@@ -106,7 +127,7 @@ function download(
       })
     })
 
-    request.on('error', reject)
+    request.on('error', (e) => { cleanup(); reject(e) })
     request.end()
   })
 }

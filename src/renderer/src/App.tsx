@@ -10,6 +10,7 @@ import CatalogPage from './pages/CatalogPage'
 import ModpackDetailPage from './pages/ModpackDetailPage'
 import SettingsPage from './pages/SettingsPage'
 import { InstallProvider } from './context/InstallContext'
+import GlobalInstallBar from './components/GlobalInstallBar'
 
 export default function App() {
   const location = useLocation()
@@ -63,6 +64,7 @@ export default function App() {
             </Routes>
           </main>
         </div>
+        <GlobalInstallBar />
       </div>
     </InstallProvider>
   )

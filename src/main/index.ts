@@ -13,7 +13,7 @@ function createWindow(): void {
     minHeight: 600,
     frame: false,
     backgroundColor: '#111827',
-    icon: join(__dirname, '../../resources/icon.png'),
+    icon: is.dev ? join(__dirname, '../../resources/icon.png') : join(process.resourcesPath, 'icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,

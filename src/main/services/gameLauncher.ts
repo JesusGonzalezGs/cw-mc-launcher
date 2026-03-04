@@ -267,7 +267,8 @@ export async function launchInstance(
   const librariesDir = path.resolve(path.join(settings.assetsDir, '..', 'libraries'))
   await extractNatives(effectiveJson, librariesDir, nativesDir)
 
-  const javaExe = resolveJavaExe(instance.mcVersion)
+  const requiredJava: number = effectiveJson.javaVersion?.majorVersion ?? getMcJavaVersion(instance.mcVersion)
+  const javaExe = isJavaReady(requiredJava) ? getJavaExe(requiredJava) : (isWindows ? 'java.exe' : 'java')
   const classpath = buildClasspath(effectiveJson, settings, instance.resolvedVersionId)
   const mainClass = effectiveJson.mainClass
 
@@ -303,10 +304,13 @@ export async function launchInstance(
   const jvmArgs: string[] = []
   const gameArgs: string[] = []
 
-  // JVM args del version.json
+  // JVM args del version.json (filtrar flags no soportados por Java < 23)
+  const JAVA23_ONLY_FLAGS = ['--sun-misc-unsafe-memory-access']
   if (Array.isArray(effectiveJson.arguments?.jvm)) {
     for (const arg of effectiveJson.arguments.jvm) {
-      jvmArgs.push(...resolveArg(arg, vars, features))
+      const resolved = resolveArg(arg, vars, features)
+      if (resolved.some(a => JAVA23_ONLY_FLAGS.some(f => a.startsWith(f)))) continue
+      jvmArgs.push(...resolved)
     }
   } else {
     // Formato antiguo (minecraftArguments)
