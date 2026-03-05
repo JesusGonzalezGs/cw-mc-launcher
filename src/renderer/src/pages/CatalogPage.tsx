@@ -373,27 +373,15 @@ export default function CatalogPage() {
           </div>
         )}
 
-        {/* CF Grid */}
-        {!loading && source === 'cf' && cfModpacks.length > 0 && (
+        {/* Grid */}
+        {!loading && (source === 'cf' ? cfModpacks : mrModpacks).length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {cfModpacks.map((mod) => (
-              <CfModpackCard
-                key={mod.id}
+            {(source === 'cf' ? cfModpacks : mrModpacks).map((mod: any) => (
+              <ModpackCard
+                key={source === 'cf' ? mod.id : mod.project_id}
                 mod={mod}
-                onClick={() => navigate(`/catalog/${mod.id}`)}
-              />
-            ))}
-          </div>
-        )}
-
-        {/* MR Grid */}
-        {!loading && source === 'mr' && mrModpacks.length > 0 && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {mrModpacks.map((mod) => (
-              <MrModpackCard
-                key={mod.project_id}
-                mod={mod}
-                onClick={() => navigate(`/catalog/mr/${mod.project_id}`)}
+                source={source}
+                onClick={() => navigate(source === 'cf' ? `/catalog/${mod.id}` : `/catalog/mr/${mod.project_id}`)}
               />
             ))}
           </div>
@@ -439,107 +427,73 @@ export default function CatalogPage() {
   )
 }
 
-// ── CfModpackCard ─────────────────────────────────────────────────────────────
+// ── ModpackCard ───────────────────────────────────────────────────────────────
 
-function CfModpackCard({ mod, onClick }: { mod: CfMod; onClick: () => void }) {
-  const loaderNums = [...new Set(
-    (mod.latestFilesIndexes ?? []).map((f) => f.modLoader).filter((l): l is number => !!l)
-  )]
-  const mcVersions = [...new Set(
-    (mod.latestFilesIndexes ?? []).map((f) => f.gameVersion).filter((v) => !!v && /^\d+\.\d+/.test(v))
-  )]
+function ModpackCard({ mod, source, onClick }: { mod: any; source: 'cf' | 'mr'; onClick: () => void }) {
+  const isCf = source === 'cf'
+  const name = isCf ? mod.name : mod.title
+  const summary = isCf ? mod.summary : mod.description
+  const imageUrl = isCf ? mod.logo?.url : mod.icon_url
+  const downloads = isCf ? mod.downloadCount : (mod.downloads ?? 0)
+  const dateStr = isCf ? mod.dateModified : mod.date_modified
+
+  const loaders = isCf
+    ? [...new Set((mod.latestFilesIndexes ?? []).map((f: any) => f.modLoader).filter(Boolean) as number[])]
+        .filter(l => CF_LOADER_NAMES[l])
+        .map(l => ({ key: String(l), label: CF_LOADER_NAMES[l], color: CF_LOADER_COLORS[l] ?? 'bg-gray-500/15 text-gray-300 border-gray-500/25' }))
+    : ((mod.display_categories ?? mod.categories ?? []).filter((c: string) => KNOWN_LOADERS.has(c)) as string[])
+        .map(l => ({ key: l, label: l.charAt(0).toUpperCase() + l.slice(1), color: MR_LOADER_COLORS[l] ?? 'bg-gray-500/15 text-gray-300 border-gray-500/25' }))
+
+  const mcVersions = isCf
+    ? [...new Set((mod.latestFilesIndexes ?? []).map((f: any) => f.gameVersion).filter((v: string) => v && /^\d+\.\d+/.test(v)) as string[])]
+    : (mod.versions ?? []).filter((v: string) => /^\d+\.\d+/.test(v)).slice(0, 3) as string[]
+
+  const cardClass = isCf
+    ? 'via-orange-950/5 border-orange-500/25 hover:border-orange-400/50'
+    : 'via-green-950/10 border-green-500/25 hover:border-green-400/50'
+  const fallbackBg = isCf
+    ? 'from-orange-900/70 via-amber-900/40 to-yellow-900/60'
+    : 'from-green-900/70 via-emerald-900/40 to-teal-900/60'
 
   return (
     <article
-      className="rounded-2xl border cursor-pointer transition-all overflow-hidden flex flex-col shadow-md hover:shadow-xl hover:-translate-y-0.5 bg-gradient-to-br from-gray-800/90 via-orange-950/5 to-gray-900 border-orange-500/25 hover:border-orange-400/50"
+      className={`rounded-2xl border cursor-pointer transition-all overflow-hidden flex flex-col shadow-md hover:shadow-xl hover:-translate-y-0.5 bg-gradient-to-br from-gray-800/90 ${cardClass} to-gray-900`}
       onClick={onClick}
       tabIndex={0}
       role="button"
-      aria-label={`Ver detalle de ${mod.name}`}
+      aria-label={`Ver detalle de ${name}`}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
     >
       <div className="aspect-video relative overflow-hidden flex-shrink-0 rounded-t-2xl">
-        {mod.logo?.url ? (
-          <img src={mod.logo.url} alt={`Logo de ${mod.name}`} className="w-full h-full object-cover" loading="lazy"
+        {imageUrl ? (
+          <img src={imageUrl} alt={`Logo de ${name}`} className="w-full h-full object-cover" loading="lazy"
             onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
         ) : (
-          <div className="w-full h-full bg-gradient-to-br from-orange-900/70 via-amber-900/40 to-yellow-900/60" />
+          <div className={`w-full h-full bg-gradient-to-br ${fallbackBg}`} />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-gray-900/50 to-transparent" />
       </div>
       <div className="px-3.5 pb-3.5 pt-3 flex flex-col flex-1 gap-2">
-        <h3 className="font-bold text-sm leading-tight line-clamp-1 text-white">{mod.name}</h3>
-        {mod.summary && <p className="text-xs line-clamp-2 flex-1 leading-relaxed text-gray-500">{mod.summary}</p>}
-        {loaderNums.length > 0 && (
+        <h3 className="font-bold text-sm leading-tight line-clamp-1 text-white">{name}</h3>
+        {summary && <p className="text-xs line-clamp-2 flex-1 leading-relaxed text-gray-500">{summary}</p>}
+        {loaders.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {loaderNums.map((l) => CF_LOADER_NAMES[l] && (
-              <span key={l} className={`px-1.5 py-0.5 rounded-full text-xs border ${CF_LOADER_COLORS[l] ?? 'bg-gray-500/15 text-gray-300 border-gray-500/25'}`}>
-                {CF_LOADER_NAMES[l]}
-              </span>
+            {loaders.map(l => (
+              <span key={l.key} className={`px-1.5 py-0.5 rounded-full text-xs border ${l.color}`}>{l.label}</span>
             ))}
           </div>
         )}
         {mcVersions.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {mcVersions.slice(0, 3).map((v) => (
+            {mcVersions.slice(0, 3).map(v => (
               <span key={v} className="px-1.5 py-0.5 rounded-lg text-xs border font-mono bg-gray-700/50 text-gray-400 border-gray-600/50">{v}</span>
             ))}
             {mcVersions.length > 3 && <span className="px-1.5 py-0.5 text-xs text-gray-600">+{mcVersions.length - 3}</span>}
           </div>
         )}
         <div className="flex items-center justify-between text-xs pt-2 border-t border-gray-700/50 text-gray-500">
-          <span className="flex items-center gap-1"><Download size={10} />{formatDownloads(mod.downloadCount)}</span>
-          {mod.dateModified && <span>{new Date(mod.dateModified).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
-        </div>
-      </div>
-    </article>
-  )
-}
-
-// ── MrModpackCard ─────────────────────────────────────────────────────────────
-
-function MrModpackCard({ mod, onClick }: { mod: any; onClick: () => void }) {
-  const loaders = (mod.display_categories ?? mod.categories ?? []).filter((c: string) => KNOWN_LOADERS.has(c))
-  const mcVersions: string[] = (mod.versions ?? []).filter((v: string) => /^\d+\.\d+/.test(v)).slice(0, 3)
-
-  return (
-    <article
-      className="rounded-2xl border cursor-pointer transition-all overflow-hidden flex flex-col shadow-md hover:shadow-xl hover:-translate-y-0.5 bg-gradient-to-br from-gray-800/90 via-green-950/10 to-gray-900 border-green-500/25 hover:border-green-400/50"
-      onClick={onClick}
-      tabIndex={0}
-      role="button"
-      aria-label={`Ver detalle de ${mod.title}`}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick() } }}
-    >
-      <div className="aspect-video relative overflow-hidden flex-shrink-0 rounded-t-2xl">
-        {mod.icon_url ? (
-          <img src={mod.icon_url} alt={`Logo de ${mod.title}`} className="w-full h-full object-cover" loading="lazy"
-            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-        ) : (
-          <div className="w-full h-full bg-gradient-to-br from-green-900/70 via-emerald-900/40 to-teal-900/60" />
-        )}
-        <div className="absolute inset-0 bg-gradient-to-t from-gray-900/50 to-transparent" />
-      </div>
-      <div className="px-3.5 pb-3.5 pt-3 flex flex-col flex-1 gap-2">
-        <h3 className="font-bold text-sm leading-tight line-clamp-1 text-white">{mod.title}</h3>
-        {mod.description && <p className="text-xs line-clamp-2 flex-1 leading-relaxed text-gray-500">{mod.description}</p>}
-        {loaders.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {loaders.map((l: string) => (
-              <span key={l} className={`px-1.5 py-0.5 rounded-full text-xs border capitalize ${MR_LOADER_COLORS[l] ?? 'bg-gray-500/15 text-gray-300 border-gray-500/25'}`}>{l}</span>
-            ))}
-          </div>
-        )}
-        {mcVersions.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {mcVersions.map((v) => (
-              <span key={v} className="px-1.5 py-0.5 rounded-lg text-xs border font-mono bg-gray-700/50 text-gray-400 border-gray-600/50">{v}</span>
-            ))}
-          </div>
-        )}
-        <div className="flex items-center justify-between text-xs pt-2 border-t border-gray-700/50 text-gray-500">
-          <span className="flex items-center gap-1"><Download size={10} />{formatDownloads(mod.downloads ?? 0)}</span>
-          {mod.date_modified && <span>{new Date(mod.date_modified).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
+          <span className="flex items-center gap-1"><Download size={10} />{formatDownloads(downloads)}</span>
+          {dateStr && <span>{new Date(dateStr).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })}</span>}
         </div>
       </div>
     </article>

@@ -215,11 +215,13 @@ export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
   const [versionMcFilter, setVersionMcFilter] = useState('')
   const [versionLoaderFilter, setVersionLoaderFilter] = useState('')
 
-  // CF-only changelog
+  // CF changelog
   const [changelog, setChangelog] = useState<string | null>(null)
   const [changelogLoading, setChangelogLoading] = useState(false)
   const [changelogFileId, setChangelogFileId] = useState<number | null>(null)
   const [changelogViewFileId, setChangelogViewFileId] = useState<number | null>(null)
+  // MR changelog
+  const [changelogMrVersionId, setChangelogMrVersionId] = useState<string | null>(null)
 
   const isAnyInstalling = installingVersionId !== null
 
@@ -259,6 +261,7 @@ export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
       ]).then(([proj, vers]) => {
         setMrProject(proj)
         setMrVersions(vers ?? [])
+        if ((vers ?? []).length > 0) setChangelogMrVersionId(vers[0].id)
       }).catch((e) => setError(e?.message ?? 'Error al cargar el modpack')).finally(() => setLoading(false))
     }
   }, [id, source])
@@ -356,7 +359,7 @@ export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'descripcion', label: 'Descripción' },
-    ...(source === 'cf' ? [{ id: 'changelog' as Tab, label: 'Changelog' }] : []),
+    { id: 'changelog' as Tab, label: 'Changelog' },
     ...(gallery.length > 0 ? [{ id: 'galeria' as Tab, label: `${source === 'cf' ? 'Screenshots' : 'Galería'} (${gallery.length})` }] : []),
     { id: 'versiones', label: `Versiones (${normalizedVersions.length})` },
   ]
@@ -824,7 +827,7 @@ export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
             )
           )}
 
-          {/* Changelog (CF only) */}
+          {/* Changelog */}
           {tab === 'changelog' && source === 'cf' && (
             <div>
               {cfFiles.length > 0 && (
@@ -876,6 +879,51 @@ export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
               ) : null}
             </div>
           )}
+
+          {tab === 'changelog' && source === 'mr' && (() => {
+            const selectedVer = mrVersions.find((v) => v.id === changelogMrVersionId)
+            const mrChangelog: string = selectedVer?.changelog ?? ''
+            return (
+              <div>
+                {mrVersions.length > 0 && (
+                  <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-700/50 flex-wrap">
+                    <span className="text-xs text-gray-500 shrink-0">Versión:</span>
+                    <button
+                      onClick={() => setChangelogMrVersionId(mrVersions[0].id)}
+                      className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-all ${
+                        changelogMrVersionId === mrVersions[0].id
+                          ? theme.changelogActive
+                          : 'bg-gray-800/60 border-gray-700/60 text-gray-400 hover:border-gray-600 hover:text-gray-300'
+                      }`}
+                    >
+                      Última versión
+                    </button>
+                    {mrVersions.length > 1 && (
+                      <FilterSelect
+                        icon={Layers}
+                        value={changelogMrVersionId ?? ''}
+                        onChange={(v) => setChangelogMrVersionId(v || null)}
+                        placeholder="Selecciona una versión"
+                        options={[
+                          { value: '', label: 'Selecciona una versión' },
+                          ...mrVersions.map((v: any) => ({ value: v.id, label: v.name || v.id })),
+                        ]}
+                      />
+                    )}
+                  </div>
+                )}
+                {mrChangelog ? (
+                  <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40">
+                    <pre className={`prose prose-invert prose-sm max-w-none text-gray-300 whitespace-pre-wrap font-sans text-sm leading-relaxed ${theme.descLink}`}>
+                      {mrChangelog}
+                    </pre>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">Sin changelog disponible para esta versión.</p>
+                )}
+              </div>
+            )
+          })()}
 
         </section>
       </div>

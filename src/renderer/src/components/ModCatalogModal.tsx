@@ -39,7 +39,6 @@ const MR_SORT_OPTIONS = [
   { value: 'updated', label: 'Actualización' },
 ]
 
-// ── Shared ─────────────────────────────────────────────────────────────────────
 const CF_SORT_OPTIONS = [
   { value: '2', label: 'Popularidad' },
   { value: '6', label: 'Descargas' },
@@ -101,7 +100,6 @@ function formatDate(isoDate: string): string | null {
   return new Date(isoDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-// ── CF helpers ─────────────────────────────────────────────────────────────────
 function getFileLoader(file: any): string | null {
   const fromGV = (file.gameVersions || []).find((v: string) => KNOWN_LOADER_NAMES.has(v))
   if (fromGV) return fromGV
@@ -146,9 +144,53 @@ function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
   )
 }
 
-// ── CF ModCard ─────────────────────────────────────────────────────────────────
-interface CfModCardProps {
+// ── Norm types & adapters ──────────────────────────────────────────────────────
+interface NormLoader { key: string; label: string; colorClass: string }
+interface NormVersion {
+  id: string
+  name: string
+  gameVersions: string[]
+  loaders: NormLoader[]
+  date: string | null
+}
+
+function cfFileToNormVersion(file: any): NormVersion {
+  const loaderName = getFileLoader(file)
+  return {
+    id: String(file.id),
+    name: file.displayName || file.fileName,
+    gameVersions: (file.gameVersions || []).filter((v: string) => /^\d+\.\d+/.test(v)),
+    loaders: loaderName ? [{ key: loaderName, label: loaderName, colorClass: CF_LOADER_NAME_COLORS[loaderName] ?? 'bg-gray-700/60 border-gray-600/60 text-gray-400' }] : [],
+    date: formatDate(file.fileDate),
+  }
+}
+
+function mrVerToNormVersion(ver: any): NormVersion {
+  return {
+    id: ver.id,
+    name: ver.name,
+    gameVersions: (ver.game_versions as string[]).filter(v => /^\d+\.\d+/.test(v)),
+    loaders: (ver.loaders as string[]).filter(l => MR_LOADER_COLORS[l]).map(l => ({
+      key: l, label: l.charAt(0).toUpperCase() + l.slice(1), colorClass: MR_LOADER_COLORS[l],
+    })),
+    date: formatDate(ver.date_published),
+  }
+}
+
+function pickBestNormVersion(normVersions: NormVersion[], mcVersion: string, loader: string, source: Source): NormVersion | null {
+  if (normVersions.length === 0) return null
+  const loaderKey = source === 'cf' ? (CF_LOADER_NAMES[Number(loader)] ?? '') : loader
+  return normVersions.find(v =>
+    (!mcVersion || v.gameVersions.includes(mcVersion)) &&
+    (!loaderKey || v.loaders.some(l => l.key === loaderKey))
+  ) ?? normVersions.find(v => !mcVersion || v.gameVersions.includes(mcVersion))
+    ?? normVersions[0]
+}
+
+// ── ModCard ────────────────────────────────────────────────────────────────────
+interface ModCardProps {
   mod: any
+  source: Source
   installing: boolean
   installed: boolean
   error?: string
@@ -158,29 +200,41 @@ interface CfModCardProps {
   loader: string
 }
 
-function CfModCard({ mod, installing, installed, error, onInstall, onDetail, version, loader }: CfModCardProps) {
-  const fileId = pickFileId(mod, version, loader)
-  const compatible = fileId !== null
-  const availableLoaders = [...new Set((mod.latestFilesIndexes || []).map((f: any) => f.modLoader as number))].filter(Boolean) as number[]
+function ModCard({ mod, source, installing, installed, error, onInstall, onDetail, version, loader }: ModCardProps) {
+  const isCf = source === 'cf'
+  const name = isCf ? mod.name : mod.title
+  const summary = isCf ? mod.summary : mod.description
+  const iconUrl = isCf ? mod.logo?.thumbnailUrl : mod.icon_url
+  const downloads = isCf ? mod.downloadCount : mod.downloads
+  const loaders: NormLoader[] = isCf
+    ? ([...new Set((mod.latestFilesIndexes || []).map((f: any) => f.modLoader as number))].filter(Boolean) as number[])
+        .slice(0, 3).filter(l => CF_LOADER_NAMES[l])
+        .map(l => ({ key: String(l), label: CF_LOADER_NAMES[l], colorClass: CF_LOADER_COLORS[l] ?? 'bg-gray-700/60 border-gray-600/60 text-gray-400' }))
+    : ((mod.display_categories?.filter((c: string) => MR_LOADER_COLORS[c]) ?? []) as string[])
+        .slice(0, 3)
+        .map((l: string) => ({ key: l, label: l.charAt(0).toUpperCase() + l.slice(1), colorClass: MR_LOADER_COLORS[l] ?? 'bg-gray-700/60 border-gray-600/60 text-gray-400' }))
+  const compatible = isCf
+    ? pickFileId(mod, version, loader) !== null
+    : (mod.versions?.length ?? 0) > 0
 
   return (
     <div onClick={onDetail} className="rounded-2xl border flex flex-col transition-all cursor-pointer bg-gradient-to-br from-[#1e1a2e] to-[#161320] border-purple-500/35 hover:border-purple-400/60 hover:shadow-lg hover:shadow-purple-900/30 hover:-translate-y-0.5">
       <div className="p-3 flex items-start gap-3 flex-1">
-        {mod.logo?.thumbnailUrl ? (
-          <img src={mod.logo.thumbnailUrl} alt="" className="w-12 h-12 rounded-xl object-cover flex-shrink-0 border border-black/10" />
+        {iconUrl ? (
+          <img src={iconUrl} alt="" className="w-12 h-12 rounded-xl object-cover flex-shrink-0 border border-black/10" />
         ) : (
           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/80 to-pink-500/80 flex items-center justify-center flex-shrink-0">
             <Package size={20} className="text-white" />
           </div>
         )}
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate leading-tight text-gray-100">{mod.name}</p>
-          <p className="text-xs mt-1 line-clamp-2 leading-relaxed text-gray-500">{mod.summary}</p>
-          {availableLoaders.length > 0 && (
+          <p className="text-sm font-semibold truncate leading-tight text-gray-100">{name}</p>
+          <p className="text-xs mt-1 line-clamp-2 leading-relaxed text-gray-500">{summary}</p>
+          {loaders.length > 0 && (
             <div className="flex flex-wrap gap-1 mt-1.5">
-              {availableLoaders.slice(0, 3).map(l => CF_LOADER_NAMES[l] && (
-                <span key={l} className={`text-[10px] px-1.5 py-px rounded-full font-medium border ${CF_LOADER_COLORS[l] ?? 'bg-gray-700/60 border-gray-600/60 text-gray-400'}`}>
-                  {CF_LOADER_NAMES[l]}
+              {loaders.map(l => (
+                <span key={l.key} className={`text-[10px] px-1.5 py-px rounded-full font-medium border ${l.colorClass}`}>
+                  {l.label}
                 </span>
               ))}
             </div>
@@ -188,7 +242,7 @@ function CfModCard({ mod, installing, installed, error, onInstall, onDetail, ver
         </div>
       </div>
       <div className="flex items-center justify-between px-3 py-2.5 border-t border-gray-700/50" onClick={e => e.stopPropagation()}>
-        <span className="text-xs flex items-center gap-1 text-gray-500"><Download size={10} />{formatDownloads(mod.downloadCount)}</span>
+        <span className="text-xs flex items-center gap-1 text-gray-500"><Download size={10} />{formatDownloads(downloads)}</span>
         {error ? (
           <span className="text-[11px] text-red-400 truncate max-w-[130px]" title={error}>{error}</span>
         ) : installed ? (
@@ -212,129 +266,108 @@ function CfModCard({ mod, installing, installed, error, onInstall, onDetail, ver
   )
 }
 
-// ── MR ModCard ─────────────────────────────────────────────────────────────────
-function MrModCard({ mod, installing, installed, onDetail }: { mod: any; installing: boolean; installed: boolean; onDetail: () => void }) {
-  const loaders: string[] = mod.display_categories?.filter((c: string) => MR_LOADER_COLORS[c]) ?? []
-  return (
-    <div onClick={onDetail} className="rounded-2xl border flex flex-col transition-all cursor-pointer bg-gradient-to-br from-[#1e1a2e] to-[#161320] border-purple-500/35 hover:border-purple-400/60 hover:shadow-lg hover:shadow-purple-900/30 hover:-translate-y-0.5">
-      <div className="p-3 flex items-start gap-3 flex-1">
-        {mod.icon_url ? (
-          <img src={mod.icon_url} alt="" className="w-12 h-12 rounded-xl object-cover flex-shrink-0 border border-black/10" />
-        ) : (
-          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/80 to-pink-500/80 flex items-center justify-center flex-shrink-0">
-            <Package size={20} className="text-white" />
-          </div>
-        )}
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate leading-tight text-gray-100">{mod.title}</p>
-          <p className="text-xs mt-1 line-clamp-2 leading-relaxed text-gray-500">{mod.description}</p>
-          {loaders.length > 0 && (
-            <div className="flex flex-wrap gap-1 mt-1.5">
-              {loaders.slice(0, 3).map((l: string) => (
-                <span key={l} className={`text-[10px] px-1.5 py-px rounded-full font-medium border ${MR_LOADER_COLORS[l] ?? 'bg-gray-700/60 border-gray-600/60 text-gray-400'}`}>
-                  {l.charAt(0).toUpperCase() + l.slice(1)}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-      <div className="flex items-center justify-between px-3 py-2.5 border-t border-gray-700/50" onClick={e => e.stopPropagation()}>
-        <span className="text-xs flex items-center gap-1 text-gray-500"><Download size={10} />{formatDownloads(mod.downloads)}</span>
-        {installed ? (
-          <span className="text-xs text-green-400 font-medium">✓ Instalado</span>
-        ) : (
-          <button
-            onClick={onDetail}
-            disabled={installing}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-sm transition-all hover:scale-[1.03] active:scale-95"
-          >
-            {installing ? <span className="w-3 h-3 rounded-full border-2 border-t-transparent border-white animate-spin" /> : <Download size={11} />}
-            {installing ? 'Instalando...' : 'Ver / Instalar'}
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
-// ── CF ModDetailView ───────────────────────────────────────────────────────────
+// ── DepsNotice type ────────────────────────────────────────────────────────────
 interface DepsNotice {
   deps: { filename: string; name: string }[]
   failedDeps: { modId: number; error: string }[]
 }
 
-interface CfModDetailViewProps {
+// ── ModDetailView ──────────────────────────────────────────────────────────────
+interface ModDetailViewProps {
   mod: any
+  source: Source
   installing: boolean
   installed: boolean
   installError?: string
-  onInstall: (fileId: number) => void
+  onInstall: (id: string) => void
   onBack: () => void
   version: string
   loader: string
-  depsNotice: DepsNotice | null
-  onClearDeps: () => void
+  depsNotice?: DepsNotice | null
+  onClearDeps?: () => void
 }
 
-function CfModDetailView({ mod, installing, installed, installError, onInstall, onBack, version, loader, depsNotice, onClearDeps }: CfModDetailViewProps) {
+function ModDetailView({ mod, source, installing, installed, installError, onInstall, onBack, version, loader, depsNotice, onClearDeps }: ModDetailViewProps) {
+  const isCf = source === 'cf'
   const [detailTab, setDetailTab] = useState<'desc' | 'versions' | 'screenshots'>('desc')
   const [description, setDescription] = useState('')
   const [loadingDesc, setLoadingDesc] = useState(false)
-  const [files, setFiles] = useState<any[]>([])
-  const [loadingFiles, setLoadingFiles] = useState(false)
+  const [normVersions, setNormVersions] = useState<NormVersion[]>([])
+  const [loadingVersions, setLoadingVersions] = useState(false)
   const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+  const [mrGallery, setMrGallery] = useState<any[]>([])
   const [versionFilter, setVersionFilter] = useState('')
   const [loaderFilter, setLoaderFilter] = useState('')
-  const [filesPage, setFilesPage] = useState(0)
+  const [versionsPage, setVersionsPage] = useState(0)
   const FILES_PER_PAGE = 15
 
-  const fileId = pickFileId(mod, version, loader)
-  const compatible = fileId !== null
+  const name = isCf ? mod.name : mod.title
+  const summary = isCf ? mod.summary : mod.description
+  const iconUrl = isCf ? (mod.logo?.url || mod.logo?.thumbnailUrl) : mod.icon_url
+  const downloads = isCf ? mod.downloadCount : mod.downloads
+  const authors = isCf
+    ? (mod.authors?.length > 0 ? mod.authors.map((a: any) => a.name).join(', ') : null)
+    : (mod.author ?? null)
+  const headerLoaders: NormLoader[] = isCf
+    ? ([...new Set((mod.latestFilesIndexes || []).map((f: any) => f.modLoader as number))].filter(Boolean) as number[])
+        .slice(0, 4).filter(l => CF_LOADER_NAMES[l])
+        .map(l => ({ key: String(l), label: CF_LOADER_NAMES[l], colorClass: CF_LOADER_COLORS[l] ?? 'bg-gray-700/60 border-gray-600/60 text-gray-400' }))
+    : ((mod.display_categories ?? mod.categories ?? []).filter((c: string) => MR_LOADER_COLORS[c]) as string[])
+        .map((l: string) => ({ key: l, label: l.charAt(0).toUpperCase() + l.slice(1), colorClass: MR_LOADER_COLORS[l] }))
+  const screenshots: { key: string; url: string; thumbUrl: string; title?: string }[] = isCf
+    ? (mod.screenshots ?? []).map((s: any) => ({ key: String(s.id), url: s.url || s.thumbnailUrl, thumbUrl: s.thumbnailUrl || s.url, title: s.title }))
+    : mrGallery.map((g: any, i: number) => ({ key: String(i), url: g.url, thumbUrl: g.url, title: g.title }))
 
-  const matchesFilter = (file: any) => {
-    const gv: string[] = file.gameVersions || []
-    if (versionFilter && !gv.includes(versionFilter)) return false
-    if (loaderFilter && CF_LOADER_NAMES[Number(loaderFilter)] && !gv.includes(CF_LOADER_NAMES[Number(loaderFilter)])) return false
+  const bestVersion = useMemo(() => pickBestNormVersion(normVersions, version, loader, source), [normVersions, version, loader, source])
+  const compatible = bestVersion !== null
+
+  const filteredVersions = useMemo(() => normVersions.filter(v => {
+    if (versionFilter && !v.gameVersions.includes(versionFilter)) return false
+    if (loaderFilter && !v.loaders.some(l => l.key === loaderFilter)) return false
     return true
-  }
+  }), [normVersions, versionFilter, loaderFilter])
 
-  const filteredFiles = files.filter(matchesFilter)
-  const filesTotalPages = Math.ceil(filteredFiles.length / FILES_PER_PAGE)
-  const pagedFiles = filteredFiles.slice(filesPage * FILES_PER_PAGE, (filesPage + 1) * FILES_PER_PAGE)
+  const totalPages = Math.ceil(filteredVersions.length / FILES_PER_PAGE)
+  const pagedVersions = filteredVersions.slice(versionsPage * FILES_PER_PAGE, (versionsPage + 1) * FILES_PER_PAGE)
 
-  useEffect(() => { setFilesPage(0) }, [versionFilter, loaderFilter])
+  useEffect(() => { setVersionsPage(0) }, [versionFilter, loaderFilter])
 
   const versionOptions = useMemo(() => {
-    const versions = [...new Set(files.flatMap(f => (f.gameVersions || []) as string[]).filter(v => /^\d+\.\d+/.test(v)))].sort((a, b) => {
+    const vs = [...new Set(normVersions.flatMap(v => v.gameVersions))].sort((a, b) => {
       const pa = a.split('.').map(Number), pb = b.split('.').map(Number)
       for (let i = 0; i < 3; i++) if ((pb[i] || 0) !== (pa[i] || 0)) return (pb[i] || 0) - (pa[i] || 0)
       return 0
     })
-    return [{ value: '', label: 'Todas las versiones' }, ...versions.map(v => ({ value: v, label: v }))]
-  }, [files])
+    return [{ value: '', label: 'Todas las versiones' }, ...vs.map(v => ({ value: v, label: v }))]
+  }, [normVersions])
 
   const loaderOptions = useMemo(() => {
-    const present = new Set(files.flatMap(f => (f.gameVersions || []) as string[]).map(v => Object.entries(CF_LOADER_NAMES).find(([, name]) => name === v)?.[0]).filter(Boolean) as string[])
-    return [{ value: '', label: 'Todos los loaders' }, ...Object.entries(CF_LOADER_NAMES).filter(([k]) => present.has(k)).map(([k, v]) => ({ value: k, label: v }))]
-  }, [files])
+    const ls = [...new Map(normVersions.flatMap(v => v.loaders).map(l => [l.key, l])).values()]
+    return [{ value: '', label: 'Todos los loaders' }, ...ls.map(l => ({ value: l.key, label: l.label }))]
+  }, [normVersions])
+
+  const uid = isCf ? mod.id : mod.project_id
 
   useEffect(() => {
     setLoadingDesc(true)
-    ;(window.launcher.cf.getModDescription(mod.id) as Promise<string>).then(html => setDescription(html)).catch(() => {}).finally(() => setLoadingDesc(false))
-  }, [mod.id])
+    const descP: Promise<string> = isCf
+      ? (window.launcher.cf.getModDescription(mod.id) as Promise<string>)
+      : window.launcher.mr.getProject(mod.project_id).then((p: any) => { setMrGallery(p.gallery ?? []); return p.body ?? '' })
+    descP.then(setDescription).catch(() => {}).finally(() => setLoadingDesc(false))
 
-  useEffect(() => {
-    if (detailTab !== 'versions') return
-    setLoadingFiles(true)
-    ;(window.launcher.cf.getModFiles(mod.id) as Promise<any>).then(result => {
-      const all: any[] = result?.data ?? []
-      setFiles(all)
-      const allGV = new Set(all.flatMap((f: any) => (f.gameVersions || []) as string[]))
-      setVersionFilter(version && allGV.has(version) ? version : '')
-      setLoaderFilter(loader && CF_LOADER_NAMES[Number(loader)] && allGV.has(CF_LOADER_NAMES[Number(loader)]) ? String(loader) : '')
-    }).catch(() => {}).finally(() => setLoadingFiles(false))
-  }, [mod.id, detailTab])
+    setLoadingVersions(true)
+    const versP: Promise<NormVersion[]> = isCf
+      ? (window.launcher.cf.getModFiles(mod.id) as Promise<any>).then(r => (r?.data ?? []).map(cfFileToNormVersion))
+      : window.launcher.mr.getProjectVersions(mod.project_id).then((vs: any[]) => vs.map(mrVerToNormVersion))
+    versP.then(nv => {
+      setNormVersions(nv)
+      const hasVersion = nv.some(v => v.gameVersions.includes(version))
+      setVersionFilter(version && hasVersion ? version : '')
+      const loaderKey = isCf ? (CF_LOADER_NAMES[Number(loader)] ?? '') : loader
+      const hasLoader = nv.some(v => v.loaders.some(l => l.key === loaderKey))
+      setLoaderFilter(loaderKey && hasLoader ? loaderKey : '')
+    }).catch(() => {}).finally(() => setLoadingVersions(false))
+  }, [uid])
 
   return (
     <>
@@ -356,19 +389,19 @@ function CfModDetailView({ mod, installing, installed, installError, onInstall, 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
         <div className="relative px-5 py-5 border-b border-purple-500/25 bg-[#1a1628]">
           <div className="flex items-start gap-4">
-            {mod.logo?.url || mod.logo?.thumbnailUrl ? (
-              <img src={mod.logo.url || mod.logo.thumbnailUrl} alt="" className="w-16 h-16 rounded-xl object-cover flex-shrink-0 border border-black/10 shadow" />
+            {iconUrl ? (
+              <img src={iconUrl} alt="" className="w-16 h-16 rounded-xl object-cover flex-shrink-0 border border-black/10 shadow" />
             ) : (
               <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-purple-500/80 to-pink-500/80 flex items-center justify-center flex-shrink-0"><Package size={28} className="text-white" /></div>
             )}
             <div className="flex-1 min-w-0">
-              <h2 className="text-lg font-bold leading-tight text-white">{mod.name}</h2>
-              {mod.authors?.length > 0 && <p className="text-xs mt-0.5 text-gray-500">por {mod.authors.map((a: any) => a.name).join(', ')}</p>}
-              <p className="text-sm mt-2 leading-relaxed text-gray-400">{mod.summary}</p>
+              <h2 className="text-lg font-bold leading-tight text-white">{name}</h2>
+              {authors && <p className="text-xs mt-0.5 text-gray-500">por {authors}</p>}
+              <p className="text-sm mt-2 leading-relaxed text-gray-400">{summary}</p>
               <div className="flex flex-wrap items-center gap-3 mt-3">
-                <span className="text-xs flex items-center gap-1 text-gray-500"><Download size={11} />{formatDownloads(mod.downloadCount)} descargas</span>
-                {([...new Set((mod.latestFilesIndexes || []).map((f: any) => f.modLoader as number))].filter(Boolean) as number[]).slice(0, 4).map(l => CF_LOADER_NAMES[l] && (
-                  <span key={l} className={`text-[10px] px-1.5 py-px rounded-full font-medium border ${CF_LOADER_COLORS[l] ?? 'bg-gray-700/60 border-gray-600/60 text-gray-400'}`}>{CF_LOADER_NAMES[l]}</span>
+                <span className="text-xs flex items-center gap-1 text-gray-500"><Download size={11} />{formatDownloads(downloads)} descargas</span>
+                {headerLoaders.map(l => (
+                  <span key={l.key} className={`text-[10px] px-1.5 py-px rounded-full font-medium border ${l.colorClass}`}>{l.label}</span>
                 ))}
               </div>
             </div>
@@ -378,16 +411,21 @@ function CfModDetailView({ mod, installing, installed, installError, onInstall, 
               ) : (
                 <>
                   <button
-                    onClick={() => fileId !== null && onInstall(fileId)}
-                    disabled={installing || !compatible}
+                    onClick={() => bestVersion && onInstall(bestVersion.id)}
+                    disabled={installing || (!compatible && !loadingVersions)}
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all disabled:cursor-not-allowed ${
-                      !compatible ? 'border border-gray-700 text-gray-600'
+                      !compatible && !loadingVersions ? 'border border-gray-700 text-gray-600'
                       : installing ? 'bg-purple-600/60 text-white/70 cursor-wait'
+                      : loadingVersions ? 'bg-gray-700/60 text-gray-500 cursor-wait'
                       : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-sm'
                     }`}
                   >
-                    {installing ? <span className="w-4 h-4 rounded-full border-2 border-t-transparent border-white animate-spin" /> : <Download size={14} />}
-                    {!compatible ? 'Sin versión' : installing ? 'Instalando...' : 'Instalar'}
+                    {installing
+                      ? <span className="w-4 h-4 rounded-full border-2 border-t-transparent border-white animate-spin" />
+                      : loadingVersions
+                        ? <span className="w-4 h-4 rounded-full border-2 border-t-transparent border-gray-400 animate-spin" />
+                        : <Download size={14} />}
+                    {!compatible && !loadingVersions ? 'Sin versión' : installing ? 'Instalando...' : loadingVersions ? 'Cargando...' : 'Instalar'}
                   </button>
                   {installError && <p className="text-[11px] text-red-400 max-w-[160px] text-right">{installError}</p>}
                 </>
@@ -402,204 +440,20 @@ function CfModDetailView({ mod, installing, installed, installError, onInstall, 
               <button key={key} onClick={() => setDetailTab(key)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${detailTab === key ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-700/30'}`}>
                 {labels[key]}
-                {key === 'screenshots' && mod.screenshots?.length > 0 && <span className="ml-1 text-[10px] text-gray-600">({mod.screenshots.length})</span>}
+                {key === 'screenshots' && screenshots.length > 0 && <span className="ml-1 text-[10px] text-gray-600">({screenshots.length})</span>}
               </button>
             )
           })}
         </div>
         <div className="p-5">
           {detailTab === 'desc' && (loadingDesc ? <div className="h-32 rounded-xl animate-pulse bg-gray-700/50" /> : description ? (
-            <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40 text-gray-300 text-sm leading-relaxed [&_a]:text-purple-400 [&_a:hover]:text-purple-300 [&_img]:rounded-lg [&_img]:max-w-full [&_h1]:text-white [&_h1]:font-bold [&_h1]:text-base [&_h2]:text-white [&_h2]:font-semibold [&_h3]:text-gray-200 [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-1 [&_p]:mt-2 overflow-hidden" dangerouslySetInnerHTML={{ __html: description }} />
-          ) : <p className="text-sm text-gray-600">Sin descripción disponible.</p>)}
-          {detailTab === 'versions' && (
-            <>
-              <div className="-mx-5 -mt-5 mb-4 px-4 py-3 border-b border-gray-700/60 flex flex-wrap gap-2">
-                <FilterSelect value={versionFilter} onChange={setVersionFilter} options={versionOptions} placeholder="Versión" icon={Tag} />
-                <FilterSelect value={loaderFilter} onChange={setLoaderFilter} options={loaderOptions} placeholder="Loader" icon={Layers} />
-              </div>
-              {loadingFiles ? <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-14 rounded-xl animate-pulse bg-gray-700/50" />)}</div>
-              : filteredFiles.length === 0 ? <p className="text-sm text-gray-600">No hay archivos para estos filtros.</p>
-              : (
-                <div className="space-y-2">
-                  {pagedFiles.map(file => {
-                    const gv: string[] = file.gameVersions || []
-                    const installable = !(version && !gv.includes(version)) && !(loader && CF_LOADER_NAMES[Number(loader)] && !gv.includes(CF_LOADER_NAMES[Number(loader)]))
-                    return (
-                      <div key={file.id} className="flex items-center justify-between px-4 py-3 rounded-xl border gap-3 bg-gray-800/50 border-purple-500/15 hover:border-purple-500/30 hover:bg-purple-950/10 transition-colors">
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate text-gray-200">{file.displayName || file.fileName}</p>
-                          <div className="flex items-center gap-2 mt-1 flex-wrap">
-                            {gv.filter((v: string) => /^\d+\.\d+/.test(v)).slice(0, 3).map((v: string) => (
-                              <span key={v} className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-gray-700/60 text-gray-400">{v}</span>
-                            ))}
-                            {getFileLoader(file) && <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium border ${CF_LOADER_NAME_COLORS[getFileLoader(file)!] ?? 'bg-gray-700/60 border-gray-600/60 text-gray-400'}`}>{getFileLoader(file)}</span>}
-                            {formatDate(file.fileDate) && <span className="text-[10px] text-gray-600">{formatDate(file.fileDate)}</span>}
-                          </div>
-                        </div>
-                        <button
-                          onClick={() => installable && onInstall(file.id)}
-                          disabled={installing || !installable}
-                          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-shrink-0 transition-all ${
-                            !installable ? 'border border-gray-700 text-gray-600 cursor-not-allowed'
-                            : installing ? 'bg-purple-600/60 text-white/70 cursor-wait'
-                            : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-sm'
-                          }`}
-                        >
-                          {installing && installable ? <span className="w-3 h-3 rounded-full border-2 border-t-transparent border-white animate-spin" /> : <Download size={10} />}
-                          {installable ? 'Instalar' : 'Incompatible'}
-                        </button>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-              {filesTotalPages > 1 && (
-                <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-700/60">
-                  <span className="text-xs text-gray-500">{filteredFiles.length} archivos</span>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => setFilesPage(p => Math.max(0, p - 1))} disabled={filesPage === 0} className="p-1.5 rounded-lg transition-colors disabled:opacity-40 hover:bg-gray-700 text-gray-400 hover:text-gray-200"><ChevronLeft size={15} /></button>
-                    <span className="text-xs font-medium min-w-[60px] text-center text-gray-400">{filesPage + 1} / {filesTotalPages}</span>
-                    <button onClick={() => setFilesPage(p => Math.min(filesTotalPages - 1, p + 1))} disabled={filesPage >= filesTotalPages - 1} className="p-1.5 rounded-lg transition-colors disabled:opacity-40 hover:bg-gray-700 text-gray-400 hover:text-gray-200"><ChevronRight size={15} /></button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-          {detailTab === 'screenshots' && (
-            mod.screenshots?.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {mod.screenshots.map((ss: any) => (
-                  <button key={ss.id} onClick={() => setLightboxSrc(ss.url || ss.thumbnailUrl)} className="aspect-video overflow-hidden rounded-xl border transition-all hover:-translate-y-0.5 hover:shadow-xl group border-purple-500/20 hover:border-purple-400/50" aria-label={ss.title || 'Ver screenshot'}>
-                    <img src={ss.thumbnailUrl || ss.url} alt={ss.title || ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
-                  </button>
-                ))}
-              </div>
-            ) : <p className="text-sm text-gray-500">No hay capturas disponibles.</p>
-          )}
-        </div>
-      </div>
-    </>
-  )
-}
-
-// ── MR ModDetailView ───────────────────────────────────────────────────────────
-interface MrModDetailViewProps {
-  mod: any
-  instanceId: string
-  installing: boolean
-  installed: boolean
-  installError?: string
-  onInstall: (versionId: string) => void
-  onBack: () => void
-  version: string
-  loader: string
-}
-
-function MrModDetailView({ mod, installing, installed, installError, onInstall, onBack, version, loader }: MrModDetailViewProps) {
-  const [detailTab, setDetailTab] = useState<'desc' | 'versions' | 'screenshots'>('desc')
-  const [versions, setVersions] = useState<any[]>([])
-  const [loadingVersions, setLoadingVersions] = useState(false)
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
-  const [versionFilter, setVersionFilter] = useState(version)
-  const [loaderFilter, setLoaderFilter] = useState(loader)
-  const [versionsPage, setVersionsPage] = useState(0)
-  const VERSIONS_PER_PAGE = 15
-
-  useEffect(() => {
-    if (detailTab !== 'versions') return
-    setLoadingVersions(true)
-    window.launcher.mr.getProjectVersions(mod.project_id)
-      .then(v => {
-        setVersions(v)
-        const hasVersion = v.some((ver: any) => ver.game_versions.includes(version))
-        setVersionFilter(version && hasVersion ? version : '')
-        const hasLoader = v.some((ver: any) => ver.loaders.includes(loader))
-        setLoaderFilter(loader && hasLoader ? loader : '')
-      })
-      .catch(() => {})
-      .finally(() => setLoadingVersions(false))
-  }, [mod.project_id, detailTab])
-
-  const filteredVersions = useMemo(() => versions.filter(v => {
-    if (versionFilter && !v.game_versions.includes(versionFilter)) return false
-    if (loaderFilter && !v.loaders.includes(loaderFilter)) return false
-    return true
-  }), [versions, versionFilter, loaderFilter])
-
-  const totalPages = Math.ceil(filteredVersions.length / VERSIONS_PER_PAGE)
-  const pagedVersions = filteredVersions.slice(versionsPage * VERSIONS_PER_PAGE, (versionsPage + 1) * VERSIONS_PER_PAGE)
-
-  useEffect(() => { setVersionsPage(0) }, [versionFilter, loaderFilter])
-
-  const versionOptions = useMemo(() => {
-    const vs = [...new Set(versions.flatMap(v => v.game_versions as string[]).filter(v => /^\d+\.\d+/.test(v)))].sort((a, b) => {
-      const pa = a.split('.').map(Number), pb = b.split('.').map(Number)
-      for (let i = 0; i < 3; i++) if ((pb[i] || 0) !== (pa[i] || 0)) return (pb[i] || 0) - (pa[i] || 0)
-      return 0
-    })
-    return [{ value: '', label: 'Todas las versiones' }, ...vs.map(v => ({ value: v, label: v }))]
-  }, [versions])
-
-  const loaderOptions = useMemo(() => {
-    const ls = [...new Set(versions.flatMap(v => v.loaders as string[]).filter(l => MR_LOADER_COLORS[l]))]
-    return [{ value: '', label: 'Todos los loaders' }, ...ls.map(l => ({ value: l, label: l.charAt(0).toUpperCase() + l.slice(1) }))]
-  }, [versions])
-
-  const gallery: any[] = mod.gallery ?? []
-
-  return (
-    <>
-      {lightboxSrc && <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
-      <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-700/60 flex-shrink-0">
-        <button onClick={onBack} className="flex items-center gap-1 text-sm text-purple-400 hover:text-purple-300 transition-colors">
-          <ChevronLeft size={16} />Volver al catálogo
-        </button>
-      </div>
-      <div className="flex-1 overflow-y-auto custom-scrollbar">
-        <div className="relative px-5 py-5 border-b border-purple-500/25 bg-[#1a1628]">
-          <div className="flex items-start gap-4">
-            {mod.icon_url ? (
-              <img src={mod.icon_url} alt="" className="w-16 h-16 rounded-xl object-cover flex-shrink-0 border border-black/10 shadow" />
+            isCf ? (
+              <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40 text-gray-300 text-sm leading-relaxed [&_a]:text-purple-400 [&_a:hover]:text-purple-300 [&_img]:rounded-lg [&_img]:max-w-full [&_h1]:text-white [&_h1]:font-bold [&_h1]:text-base [&_h2]:text-white [&_h2]:font-semibold [&_h3]:text-gray-200 [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-1 [&_p]:mt-2 overflow-hidden" dangerouslySetInnerHTML={{ __html: description }} />
             ) : (
-              <div className="w-16 h-16 rounded-xl bg-gradient-to-br from-purple-500/80 to-pink-500/80 flex items-center justify-center flex-shrink-0"><Package size={28} className="text-white" /></div>
-            )}
-            <div className="flex-1 min-w-0">
-              <h2 className="text-lg font-bold leading-tight text-white">{mod.title}</h2>
-              {mod.author && <p className="text-xs mt-0.5 text-gray-500">por {mod.author}</p>}
-              <p className="text-sm mt-2 leading-relaxed text-gray-400">{mod.description}</p>
-              <div className="flex flex-wrap items-center gap-3 mt-3">
-                <span className="text-xs flex items-center gap-1 text-gray-500"><Download size={11} />{formatDownloads(mod.downloads)} descargas</span>
-                {(mod.display_categories ?? mod.categories ?? []).filter((c: string) => MR_LOADER_COLORS[c]).map((l: string) => (
-                  <span key={l} className={`text-[10px] px-1.5 py-px rounded-full font-medium border ${MR_LOADER_COLORS[l]}`}>{l.charAt(0).toUpperCase() + l.slice(1)}</span>
-                ))}
-              </div>
-            </div>
-            <div className="flex-shrink-0 flex flex-col items-end gap-2">
-              {installed && <span className="text-sm text-green-400 font-medium">✓ Instalado</span>}
-              {installError && <p className="text-[11px] text-red-400 max-w-[160px] text-right">{installError}</p>}
-            </div>
-          </div>
-        </div>
-        <div className="flex gap-1 px-5 py-2 border-b border-gray-700/60">
-          {(['desc', 'versions', 'screenshots'] as const).map(key => {
-            const labels = { desc: 'Descripción', versions: 'Versiones', screenshots: 'Capturas' }
-            return (
-              <button key={key} onClick={() => setDetailTab(key)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${detailTab === key ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-700/30'}`}>
-                {labels[key]}
-                {key === 'screenshots' && gallery.length > 0 && <span className="ml-1 text-[10px] text-gray-600">({gallery.length})</span>}
-              </button>
+              <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40 text-gray-300 text-sm leading-relaxed overflow-hidden whitespace-pre-wrap">{description}</div>
             )
-          })}
-        </div>
-        <div className="p-5">
-          {detailTab === 'desc' && (
-            mod.body ? (
-              <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40 text-gray-300 text-sm leading-relaxed [&_a]:text-purple-400 [&_a:hover]:text-purple-300 [&_img]:rounded-lg [&_img]:max-w-full [&_h1]:text-white [&_h1]:font-bold [&_h1]:text-base [&_h2]:text-white [&_h2]:font-semibold [&_h3]:text-gray-200 [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-1 [&_p]:mt-2 overflow-hidden whitespace-pre-wrap">
-                {mod.body}
-              </div>
-            ) : <p className="text-sm text-gray-600">Sin descripción disponible.</p>
-          )}
+          ) : <p className="text-sm text-gray-600">Sin descripción disponible.</p>)}
+
           {detailTab === 'versions' && (
             <>
               <div className="-mx-5 -mt-5 mb-4 px-4 py-3 border-b border-gray-700/60 flex flex-wrap gap-2">
@@ -615,13 +469,13 @@ function MrModDetailView({ mod, installing, installed, installError, onInstall, 
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate text-gray-200">{ver.name}</p>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          {(ver.game_versions as string[]).slice(0, 3).map(v => (
+                          {ver.gameVersions.slice(0, 3).map(v => (
                             <span key={v} className="text-[10px] px-1.5 py-0.5 rounded-md font-medium bg-gray-700/60 text-gray-400">{v}</span>
                           ))}
-                          {(ver.loaders as string[]).filter(l => MR_LOADER_COLORS[l]).map(l => (
-                            <span key={l} className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium border ${MR_LOADER_COLORS[l]}`}>{l.charAt(0).toUpperCase() + l.slice(1)}</span>
+                          {ver.loaders.map(l => (
+                            <span key={l.key} className={`text-[10px] px-1.5 py-0.5 rounded-md font-medium border ${l.colorClass}`}>{l.label}</span>
                           ))}
-                          {formatDate(ver.date_published) && <span className="text-[10px] text-gray-600">{formatDate(ver.date_published)}</span>}
+                          {ver.date && <span className="text-[10px] text-gray-600">{ver.date}</span>}
                         </div>
                       </div>
                       <button
@@ -650,12 +504,13 @@ function MrModDetailView({ mod, installing, installed, installError, onInstall, 
               )}
             </>
           )}
+
           {detailTab === 'screenshots' && (
-            gallery.length > 0 ? (
+            screenshots.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {gallery.map((g: any, i: number) => (
-                  <button key={i} onClick={() => setLightboxSrc(g.url)} className="aspect-video overflow-hidden rounded-xl border transition-all hover:-translate-y-0.5 hover:shadow-xl group border-purple-500/20 hover:border-purple-400/50">
-                    <img src={g.url} alt={g.title || ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
+                {screenshots.map(ss => (
+                  <button key={ss.key} onClick={() => setLightboxSrc(ss.url)} className="aspect-video overflow-hidden rounded-xl border transition-all hover:-translate-y-0.5 hover:shadow-xl group border-purple-500/20 hover:border-purple-400/50" aria-label={ss.title || 'Ver screenshot'}>
+                    <img src={ss.thumbUrl || ss.url} alt={ss.title || ''} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
                   </button>
                 ))}
               </div>
@@ -713,55 +568,48 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
     setSearch('')
     setDebouncedSearch('')
     const l = instance.modLoader.toLowerCase()
-    if (source === 'mr') {
-      setLoader(l === 'vanilla' ? '' : l)
-    } else {
-      const n = CF_LOADER_NUM[l]
-      setLoader(n ? String(n) : '')
-    }
+    if (source === 'mr') setLoader(l === 'vanilla' ? '' : l)
+    else { const n = CF_LOADER_NUM[l]; setLoader(n ? String(n) : '') }
   }, [source])
 
+  // Debounce search
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    debounceRef.current = setTimeout(() => { setDebouncedSearch(search); setPage(0) }, 400)
+    debounceRef.current = setTimeout(() => { setDebouncedSearch(search); setPage(0) }, 350)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [search])
 
-  useEffect(() => { setPage(0) }, [version, loader, sortField, mrSortField])
-
   // Fetch mods
   useEffect(() => {
-    if (selectedMod) return
+    let cancelled = false
     setLoading(true)
+    const fetch = source === 'cf'
+      ? (window.launcher.cf.searchMods({
+          searchFilter: debouncedSearch,
+          gameVersion: version,
+          modLoaderType: loader ? Number(loader) : undefined,
+          sortField: Number(sortField),
+          index: page * PAGE_SIZE,
+          pageSize: PAGE_SIZE,
+        }) as Promise<any>).then(r => ({ data: r.data ?? [], total: r.pagination?.totalCount ?? 0 }))
+      : (window.launcher.mr.search({
+          query: debouncedSearch,
+          version,
+          loader: loader || undefined,
+          sortBy: mrSortField,
+          projectType: 'mod',
+          offset: page * PAGE_SIZE,
+          limit: PAGE_SIZE,
+        }) as Promise<any>).then(r => ({ data: r.hits ?? [], total: r.total_hits ?? 0 }))
 
-    if (source === 'cf') {
-      ;(window.launcher.cf.searchMods({
-        searchFilter: debouncedSearch || undefined,
-        gameVersion: version || undefined,
-        modLoaderType: loader ? Number(loader) : undefined,
-        sortField: Number(sortField),
-        sortOrder: 'desc',
-        pageSize: PAGE_SIZE,
-        index: page * PAGE_SIZE,
-      }) as Promise<any>)
-        .then(result => { setMods(result?.data ?? []); setTotalCount(result?.pagination?.totalCount ?? 0) })
-        .catch(() => {})
-        .finally(() => setLoading(false))
-    } else {
-      window.launcher.mr.search({
-        query: debouncedSearch || undefined,
-        projectType: 'mod',
-        gameVersions: version ? [version] : undefined,
-        loaders: loader ? [loader] : undefined,
-        sortBy: mrSortField,
-        limit: PAGE_SIZE,
-        offset: page * PAGE_SIZE,
-      })
-        .then(result => { setMods(result?.hits ?? []); setTotalCount(result?.total_hits ?? 0) })
-        .catch(() => {})
-        .finally(() => setLoading(false))
-    }
-  }, [debouncedSearch, version, loader, sortField, mrSortField, page, selectedMod, source])
+    fetch.then(({ data, total }) => {
+      if (!cancelled) { setMods(data); setTotalCount(total) }
+    }).catch(() => {
+      if (!cancelled) { setMods([]); setTotalCount(0) }
+    }).finally(() => { if (!cancelled) setLoading(false) })
+
+    return () => { cancelled = true }
+  }, [source, debouncedSearch, version, loader, sortField, mrSortField, page])
 
   useEffect(() => {
     if (!selectedMod) inputRef.current?.focus()
@@ -790,12 +638,30 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
     }
   }
 
-  // MR install
+  // MR install (from detail view — versionId known)
   const installMrMod = async (mod: any, versionId: string) => {
     setInstalling({ id: mod.project_id, versionId })
     setInstallErrors(prev => { const n = { ...prev }; delete n[mod.project_id]; return n })
     try {
       await window.launcher.mr.installVersion(instance.id, versionId, 'mods', mod.slug)
+      setInstalledMrSlugs(prev => new Set([...prev, mod.slug]))
+      onModInstalled()
+    } catch (err: any) {
+      setInstallErrors(prev => ({ ...prev, [mod.project_id]: err.message ?? 'Error desconocido' }))
+    } finally {
+      setInstalling(null)
+    }
+  }
+
+  // MR install (from card — pick best version first)
+  const installMrModDirect = async (mod: any) => {
+    setInstalling({ id: mod.project_id })
+    setInstallErrors(prev => { const n = { ...prev }; delete n[mod.project_id]; return n })
+    try {
+      const vers = await window.launcher.mr.getProjectVersions(mod.project_id) as any[]
+      const best = pickBestNormVersion(vers.map(mrVerToNormVersion), version, loader, 'mr')
+      if (!best) throw new Error('No hay versión compatible')
+      await window.launcher.mr.installVersion(instance.id, best.id, 'mods', mod.slug)
       setInstalledMrSlugs(prev => new Set([...prev, mod.slug]))
       onModInstalled()
     } catch (err: any) {
@@ -837,32 +703,19 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
 
           {/* Detail view or catalog */}
           {selectedMod ? (
-            source === 'cf' ? (
-              <CfModDetailView
-                mod={selectedMod}
-                installing={installing?.id === selectedMod.id}
-                installed={isCfInstalled(selectedMod.id)}
-                installError={installErrors[selectedMod.id]}
-                onInstall={fileId => installCfMod(selectedMod, fileId)}
-                onBack={() => setSelectedMod(null)}
-                version={version}
-                loader={loader}
-                depsNotice={depsNotice}
-                onClearDeps={() => setDepsNotice(null)}
-              />
-            ) : (
-              <MrModDetailView
-                mod={selectedMod}
-                instanceId={instance.id}
-                installing={installing?.id === selectedMod.project_id}
-                installed={isMrInstalled(selectedMod.slug)}
-                installError={installErrors[selectedMod.project_id]}
-                onInstall={versionId => installMrMod(selectedMod, versionId)}
-                onBack={() => setSelectedMod(null)}
-                version={version}
-                loader={loader}
-              />
-            )
+            <ModDetailView
+              mod={selectedMod}
+              source={source}
+              installing={source === 'cf' ? installing?.id === selectedMod.id : installing?.id === selectedMod.project_id}
+              installed={source === 'cf' ? isCfInstalled(selectedMod.id) : isMrInstalled(selectedMod.slug)}
+              installError={source === 'cf' ? installErrors[selectedMod.id] : installErrors[selectedMod.project_id]}
+              onInstall={id => source === 'cf' ? installCfMod(selectedMod, Number(id)) : installMrMod(selectedMod, id)}
+              onBack={() => setSelectedMod(null)}
+              version={version}
+              loader={loader}
+              depsNotice={source === 'cf' ? depsNotice : null}
+              onClearDeps={() => setDepsNotice(null)}
+            />
           ) : (
             <>
               {/* Filters */}
@@ -924,27 +777,26 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
                   </div>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-                    {source === 'cf' ? mods.map(mod => (
-                      <CfModCard
-                        key={mod.id}
-                        mod={mod}
-                        installing={installing?.id === mod.id}
-                        installed={isCfInstalled(mod.id)}
-                        error={installErrors[mod.id]}
-                        onInstall={() => { const fid = pickFileId(mod, version, loader); if (fid !== null) installCfMod(mod, fid) }}
-                        onDetail={() => setSelectedMod(mod)}
-                        version={version}
-                        loader={loader}
-                      />
-                    )) : mods.map(mod => (
-                      <MrModCard
-                        key={mod.project_id}
-                        mod={mod}
-                        installing={installing?.id === mod.project_id}
-                        installed={isMrInstalled(mod.slug)}
-                        onDetail={() => setSelectedMod(mod)}
-                      />
-                    ))}
+                    {mods.map(mod => {
+                      const uid = source === 'cf' ? mod.id : mod.project_id
+                      return (
+                        <ModCard
+                          key={uid}
+                          mod={mod}
+                          source={source}
+                          installing={installing?.id === uid}
+                          installed={source === 'cf' ? isCfInstalled(mod.id) : isMrInstalled(mod.slug)}
+                          error={installErrors[uid]}
+                          onInstall={() => source === 'cf'
+                            ? (() => { const fid = pickFileId(mod, version, loader); if (fid !== null) installCfMod(mod, fid) })()
+                            : installMrModDirect(mod)
+                          }
+                          onDetail={() => setSelectedMod(mod)}
+                          version={version}
+                          loader={loader}
+                        />
+                      )
+                    })}
                   </div>
                 )}
               </div>
