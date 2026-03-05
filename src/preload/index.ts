@@ -66,6 +66,7 @@ contextBridge.exposeInMainWorld('launcher', {
     identifyFiles: (id: string, folder: string) => ipcRenderer.invoke('instances:identifyFiles', id, folder),
     openSubFolder: (id: string, folder: string) => ipcRenderer.invoke('instances:openSubFolder', id, folder),
     getCrashReport: (id: string) => ipcRenderer.invoke('instances:getCrashReport', id),
+    launchWithOfficial: (id: string) => ipcRenderer.invoke('instances:launchWithOfficial', id),
   },
 
   // ── Minecraft ────────────────────────────────────────────────────────────────

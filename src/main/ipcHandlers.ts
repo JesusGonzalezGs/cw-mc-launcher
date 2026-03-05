@@ -63,6 +63,7 @@ import { launchInstance, isInstanceRunning, stopInstance } from './services/game
 import { downloadFile } from './utils/downloadHelper'
 import path from 'path'
 import fs from 'fs'
+import { spawn } from 'child_process'
 
 export function registerIpcHandlers(): void {
   // ── Window controls ──────────────────────────────────────────────────────────
@@ -394,5 +395,57 @@ export function registerIpcHandlers(): void {
       .sort((a, b) => b.mtime - a.mtime)
     if (!files.length) return null
     return fs.readFileSync(path.join(crashDir, files[0].name), 'utf-8')
+  })
+
+  ipcMain.handle('instances:launchWithOfficial', async (_, id: string): Promise<{ ok: boolean; method: string }> => {
+    const instance = getInstance(id)
+    if (!instance) throw new Error(`Instancia ${id} no encontrada`)
+
+    const instanceDir = getInstanceDir(id)
+    const appDataDir = app.getPath('appData')
+    const mcDir = path.join(appDataDir, '.minecraft')
+    const profilesPath = path.join(mcDir, 'launcher_profiles.json')
+
+    // Read or create launcher_profiles.json
+    let profilesData: any = { profiles: {}, settings: {}, version: 3 }
+    if (fs.existsSync(profilesPath)) {
+      try {
+        profilesData = JSON.parse(fs.readFileSync(profilesPath, 'utf-8'))
+      } catch { /* use default */ }
+    }
+    if (!profilesData.profiles) profilesData.profiles = {}
+
+    // Upsert profile
+    const profileKey = `cw-${id}`
+    profilesData.profiles[profileKey] = {
+      created: new Date().toISOString(),
+      gameDir: instanceDir,
+      icon: 'Grass',
+      lastVersionId: instance.resolvedVersionId || instance.mcVersion,
+      name: `${instance.name} (CubeWatcher)`,
+      type: 'custom',
+      lastUsed: new Date().toISOString(),
+    }
+
+    fs.mkdirSync(mcDir, { recursive: true })
+    fs.writeFileSync(profilesPath, JSON.stringify(profilesData, null, 2), 'utf-8')
+
+    // Try to open official launcher
+    const localAppData = process.env['LOCALAPPDATA'] ?? ''
+    const launcherPaths = [
+      path.join(localAppData, 'Programs', 'Minecraft Launcher', 'MinecraftLauncher.exe'),
+      path.join('C:\\XboxGames', 'Minecraft Launcher', 'Content', 'Minecraft.exe'),
+      path.join('C:\\Program Files (x86)', 'Minecraft Launcher', 'MinecraftLauncher.exe'),
+    ]
+
+    const exePath = launcherPaths.find(p => fs.existsSync(p))
+    if (exePath) {
+      spawn(exePath, [], { detached: true, stdio: 'ignore' }).unref()
+      return { ok: true, method: 'exe' }
+    }
+
+    // Fallback: open via protocol
+    shell.openExternal('minecraft://')
+    return { ok: true, method: 'protocol' }
   })
 }

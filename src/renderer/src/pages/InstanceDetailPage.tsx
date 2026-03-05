@@ -14,6 +14,7 @@ import DatapackLoaderModal from '../components/DatapackLoaderModal'
 import knownDatapackLoaders from '../data/datapackLoaders.json'
 import FilterSelect from '../components/common/FilterSelect'
 import { getInstanceLogs, appendInstanceLog, clearInstanceLogs } from '../lib/logsStore'
+import LaunchAccountModal from '../components/LaunchAccountModal'
 
 type Tab = 'resources' | 'console' | 'settings'
 type ResourceTab = 'mods' | 'datapacks' | 'resourcepacks' | 'shaderpacks'
@@ -66,6 +67,8 @@ export default function InstanceDetailPage() {
   const [identifyingMods, setIdentifyingMods] = useState(false)
   const [modToDelete, setModToDelete] = useState<string | null>(null)
   const [togglingMod, setTogglingMod] = useState<string | null>(null)
+  const [showLaunchModal, setShowLaunchModal] = useState(false)
+  const [activeAccount, setActiveAccount] = useState<any>(null)
   const logsRef = useRef<HTMLDivElement>(null)
   const identifiedRef = useRef(false)
 
@@ -80,6 +83,10 @@ export default function InstanceDetailPage() {
     setModsMeta(metaMods)
     return { files, metaMods }
   }, [id])
+
+  useEffect(() => {
+    window.launcher.auth.getActive().then(setActiveAccount).catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!id) return
@@ -901,7 +908,7 @@ export default function InstanceDetailPage() {
                     </button>
                   ) : (
                     <button
-                      onClick={handlePlay}
+                      onClick={() => setShowLaunchModal(true)}
                       className="w-full flex items-center justify-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-purple-900/30 transition-all hover:scale-[1.02] active:scale-95"
                     >
                       <Play size={13} fill="currentColor" />
@@ -1070,6 +1077,16 @@ export default function InstanceDetailPage() {
           </div>
         </>
       )}
+
+      <LaunchAccountModal
+        open={showLaunchModal}
+        instance={instance}
+        activeAccount={activeAccount}
+        onClose={() => setShowLaunchModal(false)}
+        onContinue={() => { setShowLaunchModal(false); handlePlay() }}
+        onMsaLogin={(acc) => { setActiveAccount(acc); setShowLaunchModal(false); handlePlay() }}
+        onOfficialLauncher={() => setShowLaunchModal(false)}
+      />
     </div>
   )
 }

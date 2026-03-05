@@ -50,6 +50,7 @@ declare global {
         identifyFiles: (id: string, folder: string) => Promise<void>
         openSubFolder: (id: string, folder: string) => Promise<void>
         getCrashReport: (id: string) => Promise<string | null>
+        launchWithOfficial: (id: string) => Promise<{ ok: boolean; method: string }>
       }
       mc: {
         getVersionManifest: () => Promise<any>
