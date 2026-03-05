@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import { LogOut, Check, User, Key, Settings } from 'lucide-react'
 import type { AppSettings, Account } from '../types'
+import Modal from '../components/common/Modal'
 
 interface Props {
   onAccountChange: (acc: any) => void
@@ -12,6 +13,7 @@ export default function SettingsPage({ onAccountChange }: Props) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
   const [saved, setSaved] = useState(false)
+  const [pendingLogout, setPendingLogout] = useState<Account | null>(null)
 
   const load = async () => {
     const [s, accs] = await Promise.all([
@@ -31,8 +33,10 @@ export default function SettingsPage({ onAccountChange }: Props) {
     setTimeout(() => setSaved(false), 2000)
   }
 
-  async function handleLogout(id: string) {
-    await window.launcher.auth.logout(id)
+  async function handleLogout() {
+    if (!pendingLogout) return
+    await window.launcher.auth.logout(pendingLogout.id)
+    setPendingLogout(null)
     const active = await window.launcher.auth.getActive()
     if (!active) onAccountChange(null)
     load()
@@ -48,6 +52,7 @@ export default function SettingsPage({ onAccountChange }: Props) {
   if (!settings) return null
 
   return (
+    <>
     <div className="relative min-h-full">
 
       {/* Decorative blobs */}
@@ -97,7 +102,7 @@ export default function SettingsPage({ onAccountChange }: Props) {
                     </button>
                   )}
                   <button
-                    onClick={() => handleLogout(acc.id)}
+                    onClick={() => setPendingLogout(acc)}
                     className="p-1.5 text-gray-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10"
                     title="Cerrar sesión"
                   >
@@ -165,5 +170,35 @@ export default function SettingsPage({ onAccountChange }: Props) {
 
       </div>
     </div>
+
+    <Modal
+      open={!!pendingLogout}
+      onClose={() => setPendingLogout(null)}
+      title="Cerrar sesión"
+      maxWidth="max-w-sm"
+      icon={LogOut}
+      iconBg="bg-red-500/15"
+      iconColor="text-red-400"
+    >
+      <p className="text-sm text-gray-400">
+        ¿Cerrar sesión de <span className="font-semibold text-white">{pendingLogout?.username}</span>?
+      </p>
+      <div className="flex justify-end gap-2 -mx-5 px-5 pt-4 mt-4 border-t border-gray-700/60">
+        <button
+          onClick={() => setPendingLogout(null)}
+          className="px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-gray-200 hover:bg-gray-700/40 transition-colors"
+        >
+          Cancelar
+        </button>
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-500/15 hover:bg-red-500/25 text-red-400 hover:text-red-300 transition-colors"
+        >
+          <LogOut size={14} />
+          Cerrar sesión
+        </button>
+      </div>
+    </Modal>
+    </>
   )
 }
