@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search, Download, Loader2, PackageSearch, Tag, Layers, LayoutGrid, ArrowUpDown, BookOpen } from 'lucide-react'
-import { LOADER_TYPE_MAP, MC_RELEASE_VERSIONS } from '../constants'
+import { LOADER_TYPE_MAP } from '../constants'
 import FilterSelect from '../components/common/FilterSelect'
 import type { CfMod } from '../types'
 
@@ -53,6 +53,7 @@ export default function CatalogPage() {
   const [sortOption, setSortOption] = useState('6:desc')
   const [categoryId, setCategoryId] = useState('')
   const [categories, setCategories] = useState<{ id: number; name: string }[]>([])
+  const [mcVersions, setMcVersions] = useState<string[]>([])
 
   // Results state
   const [modpacks, setModpacks] = useState<CfMod[]>([])
@@ -69,6 +70,18 @@ export default function CatalogPage() {
     debounceRef.current = setTimeout(() => setQuery(inputQuery), 400)
     return () => { if (debounceRef.current) clearTimeout(debounceRef.current) }
   }, [inputQuery])
+
+  // Load MC release versions on mount
+  useEffect(() => {
+    window.launcher.mc.getVersionManifest()
+      .then((manifest: any) => {
+        const releases: string[] = (manifest?.versions ?? [])
+          .filter((v: any) => v.type === 'release')
+          .map((v: any) => v.id as string)
+        setMcVersions(releases)
+      })
+      .catch(() => {})
+  }, [])
 
   // Load categories on mount
   useEffect(() => {
@@ -182,7 +195,7 @@ export default function CatalogPage() {
             placeholder="Todas las versiones"
             options={[
               { value: '', label: 'Todas las versiones' },
-              ...MC_RELEASE_VERSIONS.map((v) => ({ value: v, label: v })),
+              ...mcVersions.map((v) => ({ value: v, label: v })),
             ]}
           />
 

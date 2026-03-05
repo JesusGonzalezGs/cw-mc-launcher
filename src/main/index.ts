@@ -12,7 +12,8 @@ function createWindow(): void {
     minWidth: 900,
     minHeight: 600,
     frame: false,
-    backgroundColor: '#111827',
+    show: false,
+    backgroundColor: '#0a0a14',
     icon: is.dev ? join(__dirname, '../../resources/icon.png') : join(process.resourcesPath, 'icon.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -20,6 +21,10 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
     },
+  })
+
+  mainWindow.once('ready-to-show', () => {
+    mainWindow?.show()
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

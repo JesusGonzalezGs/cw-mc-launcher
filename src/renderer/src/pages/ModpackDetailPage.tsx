@@ -70,14 +70,7 @@ function getFileLoader(file: CfFile): number | null {
 
 function sanitizeHtml(html: string): string {
   let out = html
-  // Replace YouTube iframes (with closing tag) with a clickable link
-  out = out.replace(/<iframe[^>]*src="([^"]*(?:youtube\.com|youtu\.be)[^"]*)"[^>]*>[\s\S]*?<\/iframe>/gi, (_m, src) =>
-    `<a href="${src}" target="_blank" rel="noreferrer" style="display:inline-flex;align-items:center;gap:6px;padding:6px 14px;margin:4px 0;border-radius:10px;background:rgba(239,68,68,0.12);border:1px solid rgba(239,68,68,0.3);color:#fca5a5;font-size:12px;font-weight:600;text-decoration:none;">▶ Ver en YouTube</a>`
-  )
-  // Strip remaining iframes (with closing tag, self-closing, or unclosed)
-  out = out.replace(/<iframe[\s\S]*?<\/iframe>/gi, '')
-  out = out.replace(/<iframe[^>]*\/?>/gi, '')
-  // Strip script tags — they can trigger external network requests
+  // Strip script tags only
   out = out.replace(/<script[\s\S]*?<\/script>/gi, '')
   out = out.replace(/<script[^>]*\/?>/gi, '')
   return out

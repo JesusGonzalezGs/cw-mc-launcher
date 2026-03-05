@@ -16,22 +16,32 @@ export default function App() {
   const location = useLocation()
   const [activeAccount, setActiveAccount] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const [loadingStatus, setLoadingStatus] = useState('Iniciando...')
 
   useEffect(() => {
-    window.launcher.auth.getActive().then((acc) => {
+    setLoadingStatus('Iniciando...')
+    Promise.all([
+      window.launcher.auth.getActive().catch(() => null),
+      window.launcher.mc.getVersionManifest().catch(() => {}),
+    ]).then(([acc]) => {
       setActiveAccount(acc)
-      setLoading(false)
-    }).catch(() => setLoading(false))
+    }).finally(() => setLoading(false))
   }, [])
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-[radial-gradient(ellipse_at_top,_#1e1040_0%,_#0f0f1a_60%,_#0a0a14_100%)]">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-2xl shadow-purple-900/50">
-            <span className="text-2xl font-black text-white">C</span>
+      <div className="flex flex-col h-screen bg-[radial-gradient(ellipse_at_top,_#1e1040_0%,_#0f0f1a_60%,_#0a0a14_100%)]">
+        <TitleBar />
+        <div className="flex-1 flex items-center justify-center">
+          <div className="flex flex-col items-center gap-5">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-2xl shadow-purple-900/50">
+              <span className="text-3xl font-black text-white">C</span>
+            </div>
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-xs text-gray-500">{loadingStatus}</p>
+            </div>
           </div>
-          <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
         </div>
       </div>
     )

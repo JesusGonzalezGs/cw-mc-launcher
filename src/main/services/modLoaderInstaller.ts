@@ -82,30 +82,35 @@ export async function getQuiltLoaderVersions(): Promise<LoaderVersion[]> {
 }
 
 export async function getForgeVersions(mcVersion: string): Promise<string[]> {
-  const resp = await fetch(`https://files.minecraftforge.net/net/minecraftforge/forge/promotions_slim.json`)
-  if (!resp.ok) return []
-  const data = (await resp.json()) as any
-  const recommended = data.promos[`${mcVersion}-recommended`]
-  const latest = data.promos[`${mcVersion}-latest`]
-  const versions: string[] = []
-  if (recommended) versions.push(`${mcVersion}-${recommended}`)
-  if (latest && latest !== recommended) versions.push(`${mcVersion}-${latest}`)
-  return versions
+  try {
+    const resp = await fetch('https://files.minecraftforge.net/net/minecraftforge/forge/maven-metadata.json')
+    if (!resp.ok) return []
+    const data = (await resp.json()) as Record<string, string[]>
+    const versions = data[mcVersion] ?? []
+    return [...versions].reverse() // newest first
+  } catch {
+    return []
+  }
 }
 
 export async function getNeoForgeVersions(mcVersion: string): Promise<string[]> {
   try {
     // NeoForge >= 1.20.2 cambia el esquema de versiones
-    const [, minor] = mcVersion.split('.').map(Number)
+    const parts = mcVersion.split('.')
+    const minor = Number(parts[1] ?? 0)
     if (minor < 20) return []
 
     const resp = await fetch('https://maven.neoforged.net/api/maven/versions/releases/net/neoforged/neoforge')
     if (!resp.ok) return []
     const data = (await resp.json()) as any
     const all: string[] = data.versions ?? []
-    // Filtrar versiones relevantes al mcVersion (ej. "21.1.x" para 1.21.1)
-    const mcMinor = mcVersion.split('.').slice(1).join('.')
-    return all.filter((v) => v.startsWith(mcMinor)).reverse().slice(0, 5)
+
+    // NeoForge version scheme: MC 1.A.B → NeoForge A.B.x  (e.g. 1.21.1 → 21.1.x, 1.21 → 21.0.x)
+    const nfMajor = parts[1] ?? '0'
+    const nfMinor = parts[2] ?? '0'
+    const prefix = `${nfMajor}.${nfMinor}.`
+
+    return all.filter((v) => v.startsWith(prefix)).reverse()
   } catch {
     return []
   }

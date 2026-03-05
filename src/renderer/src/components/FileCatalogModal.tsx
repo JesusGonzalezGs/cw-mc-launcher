@@ -20,14 +20,6 @@ const SORT_OPTIONS = [
   { value: '4', label: 'Nombre' },
 ]
 
-const MC_VERSIONS = [
-  '1.21.4','1.21.3','1.21.1','1.21',
-  '1.20.6','1.20.4','1.20.2','1.20.1','1.20',
-  '1.19.4','1.19.2','1.19',
-  '1.18.2','1.18',
-  '1.17.1','1.16.5','1.16',
-  '1.15.2','1.14.4','1.13.2','1.12.2',
-]
 
 const PAGE_SIZE = 20
 const FILES_PER_PAGE = 15
@@ -398,6 +390,7 @@ export default function FileCatalogModal({ instance, type, installedFiles, onClo
   const [installErrors, setInstallErrors] = useState<Record<number, string>>({})
   const [installedIds, setInstalledIds] = useState(new Set<number>())
   const [selectedMod, setSelectedMod] = useState<any>(null)
+  const [mcVersions, setMcVersions] = useState<string[]>([])
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -408,6 +401,17 @@ export default function FileCatalogModal({ instance, type, installedFiles, onClo
   }, [search])
 
   useEffect(() => { setPage(0) }, [version, sortField])
+
+  useEffect(() => {
+    window.launcher.mc.getVersionManifest()
+      .then((manifest: any) => {
+        const releases: string[] = (manifest?.versions ?? [])
+          .filter((v: any) => v.type === 'release')
+          .map((v: any) => v.id as string)
+        setMcVersions(releases)
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (selectedMod) return
@@ -454,7 +458,7 @@ export default function FileCatalogModal({ instance, type, installedFiles, onClo
 
   const versionOptions = [
     { value: '', label: 'Todas las versiones' },
-    ...MC_VERSIONS.map(v => ({ value: v, label: v })),
+    ...mcVersions.map((v: string) => ({ value: v, label: v })),
   ]
 
   return (
