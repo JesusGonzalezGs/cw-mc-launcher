@@ -34,9 +34,7 @@ export default function App() {
         <TitleBar />
         <div className="flex-1 flex items-center justify-center">
           <div className="flex flex-col items-center gap-5">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center shadow-2xl shadow-purple-900/50">
-              <span className="text-3xl font-black text-white">C</span>
-            </div>
+            <img src="./icon.png" alt="Logo" className="w-16 h-16 rounded-md object-contain" draggable={false} />
             <div className="flex flex-col items-center gap-2">
               <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
               <p className="text-xs text-gray-500">{loadingStatus}</p>
