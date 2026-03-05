@@ -110,6 +110,9 @@ contextBridge.exposeInMainWorld('launcher', {
     save: (partial: any) => ipcRenderer.invoke('settings:save', partial),
   },
 
+  // ── Shell ─────────────────────────────────────────────────────────────────────
+  openExternal: (url: string) => ipcRenderer.invoke('app:openExternal', url),
+
   // ── Eventos de main → renderer ───────────────────────────────────────────────
   on: (channel: string, callback: (...args: any[]) => void) => {
     if (!(ALLOWED_EVENTS as readonly string[]).includes(channel)) return

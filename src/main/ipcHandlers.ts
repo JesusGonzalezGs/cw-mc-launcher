@@ -395,4 +395,6 @@ export function registerIpcHandlers(): void {
     if (!files.length) return null
     return fs.readFileSync(path.join(crashDir, files[0].name), 'utf-8')
   })
+
+  ipcMain.handle('app:openExternal', (_, url: string) => shell.openExternal(url))
 }

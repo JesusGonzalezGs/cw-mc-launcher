@@ -10,6 +10,7 @@ export default function AuthPage({ onLogin }: Props) {
   const [username, setUsername] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [licenseAccepted, setLicenseAccepted] = useState(false)
 
   async function handleMsa() {
     setLoading(true)
@@ -134,12 +135,20 @@ export default function AuthPage({ onLogin }: Props) {
           {mode === 'offline' && (
             <div className="space-y-4">
               <button
-                onClick={() => { setMode('choose'); setError('') }}
+                onClick={() => { setMode('choose'); setError(''); setLicenseAccepted(false) }}
                 className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors"
               >
                 <ArrowLeft size={13} />
                 Volver
               </button>
+
+              {/* Disclaimer */}
+              <div className="flex items-start gap-2.5 p-3 bg-yellow-500/8 border border-yellow-500/20 rounded-xl">
+                <AlertCircle size={14} className="text-yellow-500/80 shrink-0 mt-0.5" />
+                <p className="text-[11px] text-yellow-500/70 leading-relaxed">
+                  El modo offline está pensado únicamente para jugadores que ya poseen una copia legítima de Minecraft. No permite acceso a servidores online ni a funciones de Microsoft.
+                </p>
+              </div>
 
               <div>
                 <label htmlFor="username" className="block text-xs font-medium text-gray-400 mb-1.5">
@@ -150,7 +159,7 @@ export default function AuthPage({ onLogin }: Props) {
                   type="text"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && handleOffline()}
+                  onKeyDown={(e) => e.key === 'Enter' && licenseAccepted && handleOffline()}
                   placeholder="Steve"
                   maxLength={16}
                   className="w-full bg-gray-900/80 border border-gray-700/80 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-600 outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 focus:ring-offset-0 transition-all"
@@ -159,9 +168,31 @@ export default function AuthPage({ onLogin }: Props) {
                 <p className="text-[11px] text-gray-700 mt-1">Máximo 16 caracteres · solo servidores offline</p>
               </div>
 
+              {/* Checkbox de aceptación */}
+              <label className="flex items-start gap-2.5 cursor-pointer group">
+                <div className="relative mt-0.5 shrink-0">
+                  <input
+                    type="checkbox"
+                    checked={licenseAccepted}
+                    onChange={(e) => setLicenseAccepted(e.target.checked)}
+                    className="sr-only"
+                  />
+                  <div className={`w-4 h-4 rounded border transition-all ${licenseAccepted ? 'bg-purple-600 border-purple-500' : 'bg-gray-900 border-gray-700 group-hover:border-gray-500'}`}>
+                    {licenseAccepted && (
+                      <svg viewBox="0 0 12 12" className="w-full h-full p-0.5 text-white" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="2,6 5,9 10,3" />
+                      </svg>
+                    )}
+                  </div>
+                </div>
+                <span className="text-[11px] text-gray-500 group-hover:text-gray-400 transition-colors leading-relaxed">
+                  Confirmo que poseo una licencia válida de Minecraft y que usaré el modo offline bajo mi propia responsabilidad.
+                </span>
+              </label>
+
               <button
                 onClick={handleOffline}
-                disabled={loading || !username.trim()}
+                disabled={loading || !username.trim() || !licenseAccepted}
                 className="w-full flex items-center justify-center gap-2 py-3 rounded-xl font-semibold text-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed hover:scale-[1.01] active:scale-[0.99] bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-md shadow-purple-900/30"
               >
                 {loading ? (

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { LogOut, Check, User, Key, Settings } from 'lucide-react'
+import { LogOut, Check, User, Key, Settings, ExternalLink } from 'lucide-react'
 import type { AppSettings, Account } from '../types'
 import Modal from '../components/common/Modal'
 
@@ -150,6 +150,16 @@ export default function SettingsPage({ onAccountChange }: Props) {
             </div>
             <p className="text-xs text-gray-600 mt-1.5">Necesaria para buscar mods y modpacks en CurseForge</p>
           </div>
+          <p className="text-[11px] text-gray-700 mt-2 flex items-center gap-1">
+            Contenido proporcionado por
+            <button
+              onClick={() => window.launcher.openExternal?.('https://www.curseforge.com')}
+              className="inline-flex items-center gap-0.5 text-gray-600 hover:text-orange-400 transition-colors"
+            >
+              CurseForge
+              <ExternalLink size={10} />
+            </button>
+          </p>
         </section>
 
         {/* ── Save ─────────────────────────────────────────────────────────── */}

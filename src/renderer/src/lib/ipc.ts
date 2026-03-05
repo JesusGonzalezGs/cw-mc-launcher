@@ -86,6 +86,7 @@ declare global {
       }
       on: (channel: string, callback: (...args: any[]) => void) => void
       off: (channel: string, callback: (...args: any[]) => void) => void
+      openExternal: (url: string) => Promise<void>
     }
   }
 }
