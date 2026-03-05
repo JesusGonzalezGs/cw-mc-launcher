@@ -3,6 +3,7 @@ import {
   X, Search, Download, RefreshCw, ChevronLeft, ChevronRight,
   Tag, ArrowUpDown, Image, Sparkles, Database,
 } from 'lucide-react'
+import ImageViewer from './ImageViewer'
 import FilterSelect from './common/FilterSelect'
 import type { Instance } from '../types'
 
@@ -72,22 +73,6 @@ function pickBestFileVersion(versions: NormFileVersion[], mcVersion: string): No
   return versions.find(v => !mcVersion || v.gameVersions.includes(mcVersion)) ?? versions[0]
 }
 
-// ── Lightbox ──────────────────────────────────────────────────────────────────
-function Lightbox({ src, onClose }: { src: string; onClose: () => void }) {
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [onClose])
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90 backdrop-blur-sm" onClick={onClose}>
-      <img src={src} alt="" className="max-w-[90vw] max-h-[85vh] rounded-xl shadow-2xl object-contain" onClick={e => e.stopPropagation()} />
-      <button onClick={onClose} className="absolute top-4 right-4 p-2 rounded-xl bg-black/60 text-white hover:bg-black/80 transition-colors">
-        <X size={16} />
-      </button>
-    </div>
-  )
-}
 
 // ── FileCard ──────────────────────────────────────────────────────────────────
 function FileCard({ mod, source, installing, installed, error, onInstall, onDetail, Icon }: {
@@ -153,7 +138,7 @@ function FileDetailView({ mod, source, version, installing, installed, installEr
   const [loadingDesc, setLoadingDesc] = useState(false)
   const [normVersions, setNormVersions] = useState<NormFileVersion[]>([])
   const [loadingVersions, setLoadingVersions] = useState(false)
-  const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [versionFilter, setVersionFilter] = useState('')
   const [versionsPage, setVersionsPage] = useState(0)
 
@@ -211,7 +196,13 @@ function FileDetailView({ mod, source, version, installing, installed, installEr
 
   return (
     <>
-      {lightboxSrc && <Lightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />}
+      {lightboxIndex !== null && (
+        <ImageViewer
+          images={screenshots.map(ss => ({ url: ss.url, thumbUrl: ss.thumbUrl }))}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
       <div className="flex items-center gap-2 px-5 py-3 border-b border-gray-700/60 flex-shrink-0">
         <button onClick={onBack} className="flex items-center gap-1 text-sm text-purple-400 hover:text-purple-300 transition-colors">
           <ChevronLeft size={16} />Volver al catálogo
@@ -333,8 +324,8 @@ function FileDetailView({ mod, source, version, installing, installed, installEr
           {detailTab === 'screenshots' && (
             screenshots.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {screenshots.map(ss => (
-                  <button key={ss.key} onClick={() => setLightboxSrc(ss.url)}
+                {screenshots.map((ss, i) => (
+                  <button key={ss.key} onClick={() => setLightboxIndex(i)}
                     className="aspect-video overflow-hidden rounded-xl border transition-all hover:-translate-y-0.5 hover:shadow-xl group border-purple-500/20 hover:border-purple-400/50">
                     <img src={ss.thumbUrl || ss.url} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" loading="lazy" />
                   </button>

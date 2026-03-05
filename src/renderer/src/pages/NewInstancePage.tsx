@@ -19,7 +19,7 @@ const INPUT_CLASS = 'w-full bg-gray-800/80 border border-gray-700/80 rounded-xl 
 
 export default function NewInstancePage() {
   const navigate = useNavigate()
-  const { startInstall, finishInstall } = useInstall()
+  const { startInstall, finishInstall, installing: globalInstalling } = useInstall()
   const [tab, setTab] = useState<Tab>('vanilla')
 
   const [mcVersions, setMcVersions] = useState<McVersion[]>([])
@@ -34,17 +34,11 @@ export default function NewInstancePage() {
   const [loadingLoaderVersions, setLoadingLoaderVersions] = useState(false)
 
   const [creating, setCreating] = useState(false)
+  const isGloballyInstalling = globalInstalling.length > 0 && !creating
   const [error, setError] = useState('')
   const [progress, setProgress] = useState<DownloadProgress | null>(null)
   const [installLog, setInstallLog] = useState<string[]>([])
   const logRef = useRef<HTMLDivElement>(null)
-  const navTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  useEffect(() => {
-    return () => {
-      if (navTimeoutRef.current) clearTimeout(navTimeoutRef.current)
-    }
-  }, [])
 
   useEffect(() => {
     window.launcher.mc.getVersionManifest()
@@ -180,7 +174,6 @@ export default function NewInstancePage() {
       setProgress({ stage: '¡Listo!', percent: 100 })
       setCreating(false)
       finishInstall(installId)
-      navTimeoutRef.current = setTimeout(() => navigate('/instances'), 400)
     } catch (e: any) {
       setError(e.message ?? 'Error al crear la instancia')
       setCreating(false)
@@ -370,9 +363,15 @@ export default function NewInstancePage() {
           )}
 
           {/* Create button */}
+          {isGloballyInstalling && (
+            <p className="text-xs text-center text-yellow-400/80 bg-yellow-500/10 border border-yellow-500/20 rounded-xl px-3 py-2">
+              Hay una instalación en progreso. Espera a que termine para crear una nueva instancia.
+            </p>
+          )}
+
           <button
             onClick={handleCreate}
-            disabled={creating || !name.trim() || !mcVersion || loadingMcVersions}
+            disabled={creating || isGloballyInstalling || !name.trim() || !mcVersion || loadingMcVersions}
             className="w-full flex items-center justify-center gap-2 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl font-semibold transition-all hover:scale-[1.01] active:scale-95 shadow-md shadow-purple-900/25"
           >
             {creating ? (

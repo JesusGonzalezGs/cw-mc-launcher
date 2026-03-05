@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { LogOut, Check, User, Key, Settings, ExternalLink, Rocket, Monitor, Package, Leaf } from 'lucide-react'
+import { LogOut, Check, User, Key, Settings, ExternalLink, Rocket, Monitor, Flame, Leaf } from 'lucide-react'
 import type { AppSettings, Account } from '../types'
 import Modal from '../components/common/Modal'
 
@@ -167,7 +167,7 @@ export default function SettingsPage({ onAccountChange }: Props) {
           <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-3">Fuente de mods</h2>
           <div className="grid grid-cols-2 gap-3">
             {([
-              { value: 'cf' as const, Icon: Package, label: 'CurseForge', desc: 'Catálogo de CurseForge (requiere API Key)' },
+              { value: 'cf' as const, Icon: Flame,   label: 'CurseForge', desc: 'Catálogo de CurseForge (requiere API Key)' },
               { value: 'mr' as const, Icon: Leaf,    label: 'Modrinth',   desc: 'Catálogo de Modrinth (sin API Key)' },
             ]).map(({ value, Icon, label, desc }) => (
               <button

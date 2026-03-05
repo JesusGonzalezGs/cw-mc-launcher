@@ -4,7 +4,7 @@ import {
   ArrowLeft, Play, Square, Package, Terminal, Settings2, Trash2,
   Save, CheckCircle, Download, Loader2, Plus, RefreshCw,
   Search, AlertCircle, X, HelpCircle, FolderOpen, ExternalLink, ArrowUpDown,
-  Layers, Image, Sparkles, Database,
+  Layers, Image, Sparkles, Database, Flame,
 } from 'lucide-react'
 import type { Instance } from '../types'
 import { LOADER_NAMES } from '../constants'
@@ -936,7 +936,7 @@ export default function InstanceDetailPage() {
               <div className="rounded-2xl border bg-gradient-to-br from-gray-800/90 via-orange-950/5 to-gray-900 border-orange-500/20 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-orange-500/15">
-                    <ExternalLink size={14} className="text-orange-400" />
+                    <Flame size={14} className="text-orange-400" />
                   </div>
                   <h3 className="text-sm font-semibold text-white">CurseForge</h3>
                 </div>

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   Search, Download, Loader2, PackageSearch, Tag, Layers, ArrowUpDown,
-  BookOpen, Leaf,
+  Flame, Leaf,
 } from 'lucide-react'
 import { LOADER_TYPE_MAP } from '../constants'
 import FilterSelect from '../components/common/FilterSelect'
@@ -99,7 +99,9 @@ export default function CatalogPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState('')
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const cfFetchIdRef = useRef(0)
+  const mrFetchIdRef = useRef(0)
 
   // Load source from settings on mount
   useEffect(() => {
@@ -156,6 +158,7 @@ export default function CatalogPage() {
 
   // ── CF fetch ────────────────────────────────────────────────────────────────
   const fetchCf = useCallback(async (targetPage: number) => {
+    const id = ++cfFetchIdRef.current
     setLoading(true)
     setError('')
     try {
@@ -170,18 +173,21 @@ export default function CatalogPage() {
         pageSize: PAGE_SIZE,
         index: targetPage * PAGE_SIZE,
       })
+      if (id !== cfFetchIdRef.current) return
       setCfModpacks(resp?.data ?? [])
       setCfTotalCount(resp?.pagination?.totalCount ?? 0)
       setCfPage(targetPage)
     } catch (e: any) {
+      if (id !== cfFetchIdRef.current) return
       setError(e.message ?? 'Error al buscar modpacks')
     } finally {
-      setLoading(false)
+      if (id === cfFetchIdRef.current) setLoading(false)
     }
   }, [query, mcFilter, loaderFilter, cfSortOption, categoryId])
 
   // ── MR fetch ────────────────────────────────────────────────────────────────
   const fetchMr = useCallback(async (targetPage: number) => {
+    const id = ++mrFetchIdRef.current
     setLoading(true)
     setError('')
     try {
@@ -194,13 +200,15 @@ export default function CatalogPage() {
         limit: PAGE_SIZE,
         offset: targetPage * PAGE_SIZE,
       })
+      if (id !== mrFetchIdRef.current) return
       setMrModpacks(resp?.hits ?? [])
       setMrTotalCount(resp?.total_hits ?? 0)
       setMrPage(targetPage)
     } catch (e: any) {
+      if (id !== mrFetchIdRef.current) return
       setError(e.message ?? 'Error al buscar modpacks')
     } finally {
-      setLoading(false)
+      if (id === mrFetchIdRef.current) setLoading(false)
     }
   }, [query, mcFilter, loaderFilter, mrSortOption])
 
@@ -258,7 +266,7 @@ export default function CatalogPage() {
               ? 'bg-orange-500/10 border-orange-500/25 text-orange-300'
               : 'bg-green-500/10 border-green-500/25 text-green-300'
           }`}>
-            {source === 'cf' ? <BookOpen size={11} /> : <Leaf size={11} />}
+            {source === 'cf' ? <Flame size={11} /> : <Leaf size={11} />}
             {source === 'cf' ? 'CurseForge' : 'Modrinth'}
           </div>
           <h1 className={`text-3xl pb-4 sm:text-4xl font-extrabold tracking-tight bg-gradient-to-r bg-clip-text text-transparent mb-2 ${
@@ -318,7 +326,7 @@ export default function CatalogPage() {
           {/* CF Categories */}
           {source === 'cf' && categories.length > 0 && (
             <FilterSelect
-              icon={BookOpen}
+              icon={Flame}
               value={categoryId}
               onChange={setCategoryId}
               placeholder="Todas las categorías"

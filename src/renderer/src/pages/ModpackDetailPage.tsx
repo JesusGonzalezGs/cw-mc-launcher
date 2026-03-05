@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, Download, Loader2, AlertCircle, Check, Search, Tag, Layers, ExternalLink } from 'lucide-react'
+import { ArrowLeft, Download, Loader2, AlertCircle, AlertTriangle, Check, Search, Tag, Layers, X, Flame, Leaf } from 'lucide-react'
 import ProgressBar from '../components/ProgressBar'
 import Modal from '../components/common/Modal'
+import ImageViewer from '../components/ImageViewer'
 import FilterSelect from '../components/common/FilterSelect'
 import type { CfMod, CfFile } from '../types'
 import { useInstall } from '../context/InstallContext'
@@ -260,14 +261,14 @@ export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
     modalInput: 'focus:border-green-500/60',
   }
 
-  const { startInstall, finishInstall, progress } = useInstall()
+  const { startInstall, finishInstall, progress, installing: globalInstalling } = useInstall()
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [data, setData] = useState<PageData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [tab, setTab] = useState<Tab>('descripcion')
-  const [lightbox, setLightbox] = useState<string | null>(null)
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
   const [installedIds, setInstalledIds] = useState<Set<string>>(new Set())
   const [installingVersionId, setInstallingVersionId] = useState<string | null>(null)
   const [done, setDone] = useState(false)
@@ -285,7 +286,8 @@ export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
   const [cfChangelogViewFileId, setCfChangelogViewFileId] = useState<number | null>(null)
   const [mrChangelogVersionId, setMrChangelogVersionId] = useState<string | null>(null)
 
-  const isAnyInstalling = installingVersionId !== null
+  const isAnyInstalling = installingVersionId !== null || globalInstalling.length > 0
+  const [confirmCancel, setConfirmCancel] = useState(false)
 
   // ── Load installed IDs ────────────────────────────────────────────────────
   useEffect(() => {
@@ -398,7 +400,6 @@ export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
       setInstalledIds(prev => new Set([...prev, versionId]))
       setDone(true)
       finishInstall(installId)
-      setTimeout(() => navigate('/instances'), 2000)
     } catch (e: any) {
       if (!e?.message?.includes('CANCELLED')) setInstallError(e.message ?? 'Error al instalar el modpack')
       finishInstall(installId)
@@ -555,9 +556,9 @@ export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
                     </div>
                   )}
 
-                  {isAnyInstalling && (
+                  {installingVersionId !== null && (
                     <button
-                      onClick={() => source === 'cf' ? window.launcher.cf.cancelInstall() : window.launcher.mr.cancelInstall()}
+                      onClick={() => setConfirmCancel(true)}
                       className="text-xs px-3 py-2 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
                     >
                       Cancelar
@@ -575,7 +576,7 @@ export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
                     <a href={data.externalUrl} target="_blank" rel="noreferrer"
                       className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-orange-500/30 text-orange-300 hover:bg-orange-500/10 hover:border-orange-400/50 transition-all hover:scale-[1.02] active:scale-95"
                     >
-                      <ExternalLink size={14} />
+                      {data.cfInstall ? <Flame size={14} /> : <Leaf size={14} />}
                       {data.externalLabel}
                     </a>
                   )}
@@ -642,10 +643,10 @@ export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
           {tab === 'galeria' && (
             gallery.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {gallery.map(img => (
+                {gallery.map((img, i) => (
                   <button
                     key={img.id}
-                    onClick={() => setLightbox(img.url)}
+                    onClick={() => setLightboxIndex(i)}
                     className={`aspect-video overflow-hidden rounded-xl border ${theme.gallery} transition-all hover:-translate-y-0.5 hover:shadow-xl group`}
                     aria-label={img.title || 'Ver imagen en grande'}
                   >
@@ -898,19 +899,49 @@ export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
         </div>
       </Modal>
 
-      {/* Lightbox */}
-      {lightbox && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-          onClick={() => setLightbox(null)}
-        >
-          <img
-            src={lightbox}
-            alt="Imagen del modpack"
-            className="max-w-[90vw] max-h-[90vh] rounded-2xl shadow-2xl object-contain"
-            onClick={e => e.stopPropagation()}
-          />
+      {/* Cancel confirmation */}
+      {confirmCancel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <div className="bg-gray-900 border border-red-500/30 rounded-2xl p-6 w-80 shadow-2xl shadow-black/50 flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-red-500/15 border border-red-500/25 flex items-center justify-center shrink-0">
+                <AlertTriangle size={16} className="text-red-400" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-gray-100">¿Cancelar instalación?</p>
+                <p className="text-xs text-gray-500 mt-0.5">Se eliminarán los archivos descargados hasta ahora.</p>
+              </div>
+              <button onClick={() => setConfirmCancel(false)} className="ml-auto p-1 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-gray-700/50 transition-colors">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirmCancel(false)}
+                className="flex-1 px-3 py-2 rounded-xl text-xs font-medium bg-gray-800 hover:bg-gray-700 text-gray-300 transition-colors"
+              >
+                Seguir instalando
+              </button>
+              <button
+                onClick={() => {
+                  source === 'cf' ? window.launcher.cf.cancelInstall() : window.launcher.mr.cancelInstall()
+                  setConfirmCancel(false)
+                }}
+                className="flex-1 px-3 py-2 rounded-xl text-xs font-semibold bg-red-500/15 hover:bg-red-500/25 text-red-400 border border-red-500/25 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
+      )}
+
+      {lightboxIndex !== null && (
+        <ImageViewer
+          images={gallery.map(img => ({ url: img.url, thumbUrl: img.thumbUrl, title: img.title }))}
+          initialIndex={lightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
       )}
     </div>
   )
