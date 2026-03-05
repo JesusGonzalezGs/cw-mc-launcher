@@ -10,6 +10,8 @@ import type { Instance } from '../types'
 import { LOADER_NAMES } from '../constants'
 import ModCatalogModal from '../components/ModCatalogModal'
 import FileCatalogModal from '../components/FileCatalogModal'
+import DatapackLoaderModal from '../components/DatapackLoaderModal'
+import knownDatapackLoaders from '../data/datapackLoaders.json'
 import FilterSelect from '../components/common/FilterSelect'
 import { getInstanceLogs, appendInstanceLog, clearInstanceLogs } from '../lib/logsStore'
 
@@ -55,6 +57,7 @@ export default function InstanceDetailPage() {
   const [javaInfo, setJavaInfo] = useState<{ version: number; ready: boolean; status: string; progress: number; error: string } | null>(null)
   const [showCatalog, setShowCatalog] = useState(false)
   const [showFileCatalog, setShowFileCatalog] = useState<ResourceTab | null>(null)
+  const [showDatapackLoaderModal, setShowDatapackLoaderModal] = useState(false)
   const [togglingFile, setTogglingFile] = useState<string | null>(null)
   const [crashReport, setCrashReport] = useState<string | null>(null)
   const [modSort, setModSort] = useState<'default' | 'name' | 'name-desc' | 'enabled' | 'disabled'>('default')
@@ -182,6 +185,19 @@ export default function InstanceDetailPage() {
     }, 800)
     return () => clearInterval(timer)
   }, [javaInfo?.status])
+
+  const DATAPACK_LOADER_IDS = new Set(knownDatapackLoaders.map(l => l.curseforgeId))
+  const DATAPACK_LOADER_SLUGS = new Set(knownDatapackLoaders.map(l => l.slug))
+  function openDatapackCatalog() {
+    if (!instance || instance.modLoader === 'vanilla') { setShowFileCatalog('datapacks'); return }
+    const ignored = localStorage.getItem(`datapackLoaderIgnored_${instance.id}`) === 'true'
+    if (ignored) { setShowFileCatalog('datapacks'); return }
+    const hasLoader = Object.values(modsMeta).some(m =>
+      DATAPACK_LOADER_SLUGS.has(m.slug) || DATAPACK_LOADER_IDS.has(m.modId)
+    )
+    if (hasLoader) setShowFileCatalog('datapacks')
+    else setShowDatapackLoaderModal(true)
+  }
 
   async function handlePlay() {
     if (!instance) return
@@ -594,7 +610,7 @@ export default function InstanceDetailPage() {
                             Carpeta
                           </button>
                           <button
-                            onClick={() => setShowFileCatalog(resourceTab)}
+                            onClick={() => resourceTab === 'datapacks' ? openDatapackCatalog() : setShowFileCatalog(resourceTab)}
                             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-purple-200 transition-colors"
                           >
                             <Plus size={12} />
@@ -626,7 +642,7 @@ export default function InstanceDetailPage() {
                             </div>
                             <div className="flex items-center gap-2">
                               <button
-                                onClick={() => setShowFileCatalog(resourceTab)}
+                                onClick={() => resourceTab === 'datapacks' ? openDatapackCatalog() : setShowFileCatalog(resourceTab)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-300 hover:text-purple-200 bg-purple-500/15 hover:bg-purple-500/25 rounded-xl transition-colors"
                               >
                                 <Plus size={11} />
@@ -940,6 +956,18 @@ export default function InstanceDetailPage() {
           onClose={() => setShowCatalog(false)}
           onModInstalled={refreshMods}
           installedModIds={installedModIds}
+        />
+      )}
+
+      {/* Datapack loader modal */}
+      {showDatapackLoaderModal && instance && (
+        <DatapackLoaderModal
+          instance={instance}
+          onClose={(ignore) => {
+            if (ignore) localStorage.setItem(`datapackLoaderIgnored_${instance.id}`, 'true')
+            setShowDatapackLoaderModal(false)
+          }}
+          onInstalled={() => { setShowDatapackLoaderModal(false); refreshMods() }}
         />
       )}
 

@@ -1,0 +1,58 @@
+[
+  {
+    "slug": "open-loader",
+    "curseforgeId": 354339,
+    "name": "Open Loader",
+    "description": "Carga datapacks y resource packs desde una carpeta global. Recomendado por CurseForge.",
+    "loaders": ["forge", "neoforge"],
+    "minMcVersion": "1.14"
+  },
+  {
+    "slug": "globalpacks",
+    "curseforgeId": 317134,
+    "name": "Global Packs",
+    "description": "Define datapacks y resource packs globales para toda la instancia. Recomendado por CurseForge.",
+    "loaders": ["fabric", "forge", "neoforge", "quilt"],
+    "minMcVersion": "1.16"
+  },
+  {
+    "slug": "paxi",
+    "curseforgeId": 515708,
+    "name": "Paxi (Forge)",
+    "description": "Carga datapacks y resource packs desde la carpeta config automáticamente.",
+    "loaders": ["forge"],
+    "minMcVersion": "1.16"
+  },
+  {
+    "slug": "paxi-fabric",
+    "curseforgeId": 418881,
+    "name": "Paxi (Fabric)",
+    "description": "Carga datapacks y resource packs desde la carpeta config automáticamente.",
+    "loaders": ["fabric"],
+    "minMcVersion": "1.16"
+  },
+  {
+    "slug": "paxi-neoforge",
+    "curseforgeId": 1015157,
+    "name": "Paxi (NeoForge)",
+    "description": "Carga datapacks y resource packs desde la carpeta config automáticamente.",
+    "loaders": ["neoforge"],
+    "minMcVersion": "1.20"
+  },
+  {
+    "slug": "global-data-and-resource-packs",
+    "curseforgeId": 308702,
+    "name": "Global Data and Resource Packs",
+    "description": "Carga datapacks y resource packs de una carpeta global, compatible con todos los loaders.",
+    "loaders": ["fabric", "forge", "neoforge", "quilt"],
+    "minMcVersion": "1.14"
+  },
+  {
+    "slug": "data-loader",
+    "curseforgeId": 318894,
+    "name": "Data Loader",
+    "description": "Añade una carpeta datapacks dentro de config para carga global sin necesidad de estar en un mundo.",
+    "loaders": ["fabric"],
+    "minMcVersion": "1.19"
+  }
+]
