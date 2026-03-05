@@ -24,7 +24,11 @@ export function isInstanceRunning(instanceId: string): boolean {
 export function stopInstance(instanceId: string): void {
   const proc = runningProcesses.get(instanceId)
   if (proc) {
-    proc.kill('SIGTERM')
+    if (isWindows && proc.pid) {
+      spawn('taskkill', ['/pid', String(proc.pid), '/f', '/t'], { detached: true, stdio: 'ignore' })
+    } else {
+      proc.kill('SIGTERM')
+    }
     runningProcesses.delete(instanceId)
   }
 }

@@ -21,6 +21,7 @@ export interface AppSettings {
   cfApiToken: string
   windowWidth: number
   windowHeight: number
+  launchMode: 'cwmc' | 'official'
 }
 
 function getDefaultDirs() {
@@ -67,6 +68,7 @@ export function getSettings(): AppSettings {
     cfApiToken: stored.cfApiToken ?? '',
     windowWidth: stored.windowWidth ?? 1200,
     windowHeight: stored.windowHeight ?? 760,
+    launchMode: stored.launchMode ?? 'cwmc',
   }
 }
 

@@ -201,12 +201,17 @@ export default function InstanceDetailPage() {
 
   async function handlePlay() {
     if (!instance) return
-    setIsRunning(true)
     clearInstanceLogs(id!)
     setLogs([])
-    setTab('console' as Tab)
     try {
-      await window.launcher.instances.launch(instance)
+      const result = await window.launcher.instances.launch(instance)
+      if ((result as any)?.method === 'official') {
+        setLogs(['[INFO] Launcher oficial de Mojang abierto con el perfil configurado.'])
+        setTab('console' as Tab)
+      } else {
+        setIsRunning(true)
+        setTab('console' as Tab)
+      }
     } catch (e: any) {
       setLogs((prev) => [...prev, `[ERROR] ${e.message}`])
       setIsRunning(false)

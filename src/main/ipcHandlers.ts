@@ -63,6 +63,7 @@ import { launchInstance, isInstanceRunning, stopInstance } from './services/game
 import { downloadFile } from './utils/downloadHelper'
 import path from 'path'
 import fs from 'fs'
+import { spawn } from 'child_process'
 
 export function registerIpcHandlers(): void {
   // ── Window controls ──────────────────────────────────────────────────────────
@@ -195,8 +196,53 @@ export function registerIpcHandlers(): void {
       await refreshAccountIfNeeded(settings.activeAccountId).catch(console.error)
     }
 
+    // Modo launcher oficial: crear perfil y abrir MinecraftLauncher.exe --workDir
+    if (settings.launchMode === 'official') {
+      const instanceDir = getInstanceDir(instance.id)
+      const installDir = path.resolve(path.join(settings.assetsDir, '..'))
+      const librariesDir = path.join(installDir, 'libraries')
+      const profilesPath = path.join(installDir, 'launcher_profiles.json')
+
+      const jvmArgs = instance.jvmArgs || settings.jvmArgs || '-Xmx2G'
+      const profileKey = 'cw-' + instance.id
+      const profilesData: any = {
+        profiles: {
+          [profileKey]: {
+            created: new Date().toISOString(),
+            gameDir: instanceDir,
+            icon: 'Grass',
+            javaArgs: jvmArgs + ' -DlibraryDirectory="' + librariesDir + '"',
+            lastVersionId: instance.resolvedVersionId || instance.mcVersion,
+            name: instance.name,
+            type: 'custom',
+            lastUsed: new Date().toISOString(),
+          },
+        },
+        selectedProfile: profileKey,
+        settings: { keepLauncherOpen: false, showGameLog: false },
+        version: 3,
+      }
+      fs.mkdirSync(installDir, { recursive: true })
+      fs.writeFileSync(profilesPath, JSON.stringify(profilesData, null, 2), 'utf-8')
+
+      const localAppData = process.env['LOCALAPPDATA'] ?? ''
+      const officialPaths = [
+        path.join(localAppData, 'Programs', 'Minecraft Launcher', 'MinecraftLauncher.exe'),
+        path.join('C:', 'XboxGames', 'Minecraft Launcher', 'Content', 'Minecraft.exe'),
+        path.join('C:', 'Program Files (x86)', 'Minecraft Launcher', 'MinecraftLauncher.exe'),
+      ]
+      const exePath = officialPaths.find(p => fs.existsSync(p))
+      if (exePath) {
+        spawn(exePath, ['--workDir', installDir], { detached: true, stdio: 'ignore' }).unref()
+      } else {
+        shell.openExternal('minecraft://')
+      }
+      return { ok: true, method: 'official' }
+    }
+
+    // Modo CW-MC: lanzamiento directo con Java
     await launchInstance(instance, win)
-    return { ok: true }
+    return { ok: true, method: 'direct' }
   })
 
   ipcMain.handle('instances:getMods', (_, id: string) => listMods(id))

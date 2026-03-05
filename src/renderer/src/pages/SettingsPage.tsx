@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react'
-import { LogOut, Check, User, Key, Settings, ExternalLink } from 'lucide-react'
+import { LogOut, Check, User, Key, Settings, ExternalLink, Rocket, Monitor } from 'lucide-react'
 import type { AppSettings, Account } from '../types'
 import Modal from '../components/common/Modal'
 
@@ -160,6 +160,34 @@ export default function SettingsPage({ onAccountChange }: Props) {
               <ExternalLink size={10} />
             </button>
           </p>
+        </section>
+
+        {/* ── Modo de lanzamiento ──────────────────────────────────────────── */}
+        <section>
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-3">Modo de lanzamiento</h2>
+          <div className="grid grid-cols-2 gap-3">
+            {([
+              { value: 'cwmc' as const,     Icon: Rocket,  label: 'Launcher CW-MC',  desc: 'Lanzamiento directo con logs y control completo' },
+              { value: 'official' as const, Icon: Monitor, label: 'Launcher oficial', desc: 'Abre el launcher de Mojang con el perfil configurado' },
+            ]).map(({ value, Icon, label, desc }) => (
+              <button
+                key={value}
+                onClick={() => setSettings({ ...settings, launchMode: value })}
+                className={[
+                  'flex flex-col gap-2 p-3.5 rounded-xl border text-left transition-all',
+                  settings.launchMode === value
+                    ? 'bg-purple-500/15 border-purple-500/50 shadow-sm shadow-purple-900/20'
+                    : 'bg-gray-800/40 border-gray-700/60 hover:border-gray-600 hover:bg-gray-800/60',
+                ].join(' ')}
+              >
+                <div className="flex items-center gap-2">
+                  <Icon size={14} className={settings.launchMode === value ? 'text-purple-400' : 'text-gray-500'} />
+                  <span className={['text-sm font-semibold', settings.launchMode === value ? 'text-white' : 'text-gray-400'].join(' ')}>{label}</span>
+                </div>
+                <p className="text-[11px] text-gray-600 leading-relaxed">{desc}</p>
+              </button>
+            ))}
+          </div>
         </section>
 
         {/* ── Save ─────────────────────────────────────────────────────────── */}

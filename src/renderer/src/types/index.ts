@@ -42,6 +42,7 @@ export interface AppSettings {
   cfApiToken: string
   windowWidth: number
   windowHeight: number
+  launchMode: 'cwmc' | 'official'
 }
 
 export interface JavaStatus {
