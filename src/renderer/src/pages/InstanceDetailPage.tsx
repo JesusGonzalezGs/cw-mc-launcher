@@ -1029,7 +1029,7 @@ export default function InstanceDetailPage() {
           <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" onClick={() => setModToDelete(null)} />
           <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none px-4">
             <div
-              className="w-full max-w-sm rounded-2xl shadow-2xl border pointer-events-auto bg-gradient-to-br from-gray-900 via-purple-950/20 to-[#0a0a14] border-red-500/30"
+              className="w-full max-w-sm rounded-2xl shadow-2xl border pointer-events-auto bg-[#13111f] border-purple-500/40"
               onClick={e => e.stopPropagation()}
             >
               <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700/60">
@@ -1039,7 +1039,7 @@ export default function InstanceDetailPage() {
                   </div>
                   <h3 className="font-semibold text-sm text-white">Eliminar mod</h3>
                 </div>
-                <button onClick={() => setModToDelete(null)} className="p-1.5 rounded-lg hover:bg-gray-700 text-gray-400 transition-colors">
+                <button onClick={() => setModToDelete(null)} className="p-1.5 rounded-lg hover:bg-purple-500/15 text-gray-400 hover:text-gray-200 transition-colors">
                   <X size={15} />
                 </button>
               </div>
@@ -1051,16 +1051,16 @@ export default function InstanceDetailPage() {
                 </p>
                 <p className="text-xs mt-1.5 text-gray-500">El archivo se borrará permanentemente.</p>
               </div>
-              <div className="flex justify-end gap-2 px-5 py-4 border-t border-gray-700/60">
+              <div className="flex justify-end gap-2 px-5 py-3 border-t border-gray-700/60">
                 <button
                   onClick={() => setModToDelete(null)}
-                  className="px-4 py-2 rounded-xl text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-300 transition-colors"
+                  className="px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-gray-200 hover:bg-gray-700/40 transition-colors"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={() => handleRemoveMod(modToDelete)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-semibold bg-red-600 hover:bg-red-500 text-white transition-colors"
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-red-500/15 hover:bg-red-500/25 text-red-400 hover:text-red-300 transition-colors"
                 >
                   <Trash2 size={14} />
                   Eliminar

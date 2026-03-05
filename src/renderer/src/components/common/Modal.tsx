@@ -47,7 +47,7 @@ export default function Modal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
-        className={`relative w-full ${maxWidth} rounded-2xl shadow-2xl border bg-gradient-to-br from-gray-900 via-purple-950/30 to-[#0a0a14] border-purple-500/30`}
+        className={`relative w-full ${maxWidth} rounded-2xl shadow-2xl border bg-[#13111f] border-purple-500/40`}
       >
         {/* Header */}
         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700/60">
