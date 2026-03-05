@@ -14,7 +14,11 @@ export default function GlobalInstallBar() {
   const isDone = percent >= 100
 
   const handleConfirmCancel = () => {
-    window.launcher.cf.cancelInstall()
+    if (current.source === 'mr') {
+      window.launcher.mr.cancelInstall()
+    } else {
+      window.launcher.cf.cancelInstall()
+    }
     setConfirming(false)
   }
 
@@ -55,11 +59,11 @@ export default function GlobalInstallBar() {
       )}
 
       {/* Barra de progreso */}
-      <div className="shrink-0 border-t border-purple-500/20 bg-gray-900/90 backdrop-blur px-4 py-2 flex items-center gap-3">
+      <div className={`shrink-0 border-t bg-gray-900/90 backdrop-blur px-4 py-2 flex items-center gap-3 ${current.source === 'mr' ? 'border-green-500/20' : 'border-purple-500/20'}`}>
         {isDone ? (
           <PackageOpen size={14} className="text-green-400 shrink-0" />
         ) : (
-          <Loader2 size={14} className="text-purple-400 animate-spin shrink-0" />
+          <Loader2 size={14} className={`animate-spin shrink-0 ${current.source === 'mr' ? 'text-green-400' : 'text-purple-400'}`} />
         )}
 
         <div className="flex-1 min-w-0">
@@ -69,7 +73,7 @@ export default function GlobalInstallBar() {
           </div>
           <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
             <div
-              className={`h-full rounded-full transition-all duration-300 ${isDone ? 'bg-green-500' : 'bg-gradient-to-r from-purple-500 to-pink-500'}`}
+              className={`h-full rounded-full transition-all duration-300 ${isDone ? 'bg-green-500' : current.source === 'mr' ? 'bg-gradient-to-r from-green-500 to-emerald-500' : 'bg-gradient-to-r from-purple-500 to-pink-500'}`}
               style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
             />
           </div>

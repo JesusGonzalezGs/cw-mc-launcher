@@ -27,7 +27,7 @@ export default function InstanceCard({ instance, isRunning, onPlay, onStop, onDe
   const menuRef = useRef<HTMLDivElement>(null)
   const loaderName = LOADER_NAMES[instance.modLoader] ?? instance.modLoader
   const loaderBadge = LOADER_BADGE_COLORS[instance.modLoader] ?? 'bg-gray-500/15 text-gray-300 border-gray-500/25'
-  const logo = instance.cfMeta?.logoUrl
+  const logo = instance.cfMeta?.logoUrl ?? instance.mrMeta?.logoUrl
 
   useEffect(() => {
     if (!menuOpen) return

@@ -60,6 +60,7 @@ export default function InstanceDetailPage() {
   const [showDatapackLoaderModal, setShowDatapackLoaderModal] = useState(false)
   const [togglingFile, setTogglingFile] = useState<string | null>(null)
   const [crashReport, setCrashReport] = useState<string | null>(null)
+  const [modSource, setModSource] = useState<'cf' | 'mr'>('cf')
   const [modSort, setModSort] = useState<'default' | 'name' | 'name-desc' | 'enabled' | 'disabled'>('default')
   const [modSearch, setModSearch] = useState('')
   const [jvmSaved, setJvmSaved] = useState(false)
@@ -88,6 +89,14 @@ export default function InstanceDetailPage() {
       setInstance(inst)
       setJvmArgs(inst.jvmArgs ?? '')
       window.launcher.java.getForMcVersion(inst.mcVersion).then(setJavaInfo)
+      // Derive modSource from instance origin; fall back to global setting for manual instances
+      if (inst.source === 'modrinth') {
+        setModSource('mr')
+      } else if (inst.source === 'curseforge') {
+        setModSource('cf')
+      } else {
+        window.launcher.settings.get().then((s: any) => { if (s?.modSource) setModSource(s.modSource) }).catch(() => {})
+      }
     })
     refreshMods().then(result => {
       if (!result || identifiedRef.current) return
@@ -289,6 +298,11 @@ export default function InstanceDetailPage() {
     [modsMeta]
   )
 
+  const installedMrSlugs = useMemo(
+    () => new Set(Object.values(modsMeta).map(m => m.mrSlug).filter(Boolean) as string[]),
+    [modsMeta]
+  )
+
   const filteredMods = useMemo(() => {
     let list = modSearch
       ? mods.filter((f) => {
@@ -316,7 +330,7 @@ export default function InstanceDetailPage() {
 
   const loaderName = LOADER_NAMES[instance.modLoader] ?? instance.modLoader
   const loaderBadge = LOADER_BADGE_COLORS[instance.modLoader] ?? 'bg-gray-500/15 text-gray-300 border-gray-500/25'
-  const logo = instance.cfMeta?.logoUrl
+  const logo = instance.cfMeta?.logoUrl ?? instance.mrMeta?.logoUrl
 
   const TABS: [Tab, React.ElementType, string][] = [
     ['resources', Layers,   'Recursos'],
@@ -950,6 +964,31 @@ export default function InstanceDetailPage() {
               </div>
             )}
 
+            {/* Modrinth panel */}
+            {instance.mrMeta && (
+              <div className="rounded-2xl border bg-gradient-to-br from-gray-800/90 via-green-950/5 to-gray-900 border-green-500/20 p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <div className="w-7 h-7 rounded-lg flex items-center justify-center bg-green-500/15">
+                    <ExternalLink size={14} className="text-green-400" />
+                  </div>
+                  <h3 className="text-sm font-semibold text-white">Modrinth</h3>
+                </div>
+                <div className="space-y-2.5">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest font-semibold text-gray-600 mb-0.5">Modpack</p>
+                    <p className="text-sm font-medium text-gray-200 truncate">{instance.mrMeta.name}</p>
+                  </div>
+                  <button
+                    onClick={() => navigate(`/catalog/mr/${instance.mrMeta!.projectId}`)}
+                    className="flex items-center justify-center gap-2 w-full px-3 py-2.5 mt-1 rounded-xl text-sm font-semibold border border-green-500/30 text-green-300 hover:bg-green-500/10 hover:border-green-400/50 transition-all hover:scale-[1.02] active:scale-95"
+                  >
+                    <ExternalLink size={13} />
+                    Ver página del modpack
+                  </button>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       </div>
@@ -961,6 +1000,8 @@ export default function InstanceDetailPage() {
           onClose={() => setShowCatalog(false)}
           onModInstalled={refreshMods}
           installedModIds={installedModIds}
+          installedMrSlugs={installedMrSlugs}
+          defaultSource={modSource}
         />
       )}
 
@@ -982,6 +1023,7 @@ export default function InstanceDetailPage() {
           instance={instance}
           type={showFileCatalog}
           installedFiles={(resourceFiles[showFileCatalog] ?? []).map(e => e.name)}
+          defaultSource={modSource}
           onClose={() => setShowFileCatalog(null)}
           onInstalled={(filename) => {
             setResourceFiles(prev => ({

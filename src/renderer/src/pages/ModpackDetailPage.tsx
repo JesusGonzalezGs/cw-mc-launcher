@@ -7,18 +7,33 @@ import FilterSelect from '../components/common/FilterSelect'
 import type { CfMod, CfFile } from '../types'
 import { useInstall } from '../context/InstallContext'
 
-// ── Constants ────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
-const LOADER_NAMES: Record<number, string> = { 1: 'Forge', 4: 'Fabric', 5: 'Quilt', 6: 'NeoForge' }
-const LOADER_COLORS: Record<number, string> = {
-  1: 'bg-orange-500/15 text-orange-300 border-orange-500/25',
-  4: 'bg-blue-500/15 text-blue-300 border-blue-500/25',
-  5: 'bg-purple-500/15 text-purple-300 border-purple-500/25',
-  6: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25',
+const CF_LOADER_ID_TO_NAME: Record<number, string> = { 1: 'Forge', 4: 'Fabric', 5: 'Quilt', 6: 'NeoForge' }
+
+const LOADER_COLORS_BY_NAME: Record<string, string> = {
+  Forge:    'bg-orange-500/15 text-orange-300 border-orange-500/25',
+  Fabric:   'bg-blue-500/15 text-blue-300 border-blue-500/25',
+  Quilt:    'bg-purple-500/15 text-purple-300 border-purple-500/25',
+  NeoForge: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25',
 }
-const CARD_CLASS = 'bg-gradient-to-br from-gray-800/90 via-purple-950/10 to-gray-900 border-purple-500/30'
+const DEFAULT_LOADER_COLOR = 'bg-gray-500/15 text-gray-300 border-gray-500/25'
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+interface NormalizedLoader { name: string; color: string }
+
+interface NormalizedVersion {
+  id: string
+  name: string
+  mcVersions: string[]
+  loaders: NormalizedLoader[]
+  fileSize?: number
+  datePublished?: string
+  versionType?: string
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 
 function formatDownloads(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
@@ -38,6 +53,12 @@ function formatDate(s?: string): string {
   return new Date(s).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', year: 'numeric' })
 }
 
+function sanitizeHtml(html: string): string {
+  return html
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<script[^>]*\/?>/gi, '')
+}
+
 function getFileMcVersions(file: CfFile): string[] {
   const fromGV = (file.gameVersions ?? []).filter((v) => /^\d+\.\d+/.test(v))
   if (fromGV.length > 0) return fromGV
@@ -46,125 +67,312 @@ function getFileMcVersions(file: CfFile): string[] {
     .filter((v) => /^\d+\.\d+/.test(v))
 }
 
-function getFileLoader(file: CfFile): number | null {
-  // Newer CF files include the loader name directly in gameVersions
+function getFileLoaderNum(file: CfFile): number | null {
   const gv = file.gameVersions ?? []
   if (gv.includes('NeoForge')) return 6
   if (gv.includes('Forge')) return 1
   if (gv.includes('Fabric')) return 4
   if (gv.includes('Quilt')) return 5
-
-  // Older CF files have the loader only in sortableGameVersions.gameVersionName
-  // (e.g. "Forge-14.23.5.2860", "Fabric-0.14.21", etc.)
   for (const entry of file.sortableGameVersions ?? []) {
-    const name = (entry.gameVersionName ?? '').toLowerCase()
-    if (name.includes('neoforge')) return 6
-    if (name.includes('forge')) return 1
-    if (name.includes('fabric')) return 4
-    if (name.includes('quilt')) return 5
+    const n = (entry.gameVersionName ?? '').toLowerCase()
+    if (n.includes('neoforge')) return 6
+    if (n.includes('forge')) return 1
+    if (n.includes('fabric')) return 4
+    if (n.includes('quilt')) return 5
   }
   return null
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function sanitizeHtml(html: string): string {
-  let out = html
-  // Strip script tags only
-  out = out.replace(/<script[\s\S]*?<\/script>/gi, '')
-  out = out.replace(/<script[^>]*\/?>/gi, '')
-  return out
+function normalizeCfFile(
+  file: CfFile,
+  fallbackMcVersions: string[],
+  fallbackLoaderNum: number | null,
+): NormalizedVersion {
+  const loaderNum = getFileLoaderNum(file) ?? fallbackLoaderNum
+  const loaderName = loaderNum !== null ? (CF_LOADER_ID_TO_NAME[loaderNum] ?? '') : ''
+  const mcVersions = getFileMcVersions(file)
+  return {
+    id: String(file.id),
+    name: file.displayName || file.fileName || '',
+    mcVersions: mcVersions.length > 0 ? mcVersions : fallbackMcVersions,
+    loaders: loaderName ? [{ name: loaderName, color: LOADER_COLORS_BY_NAME[loaderName] ?? DEFAULT_LOADER_COLOR }] : [],
+    fileSize: (file as any).fileLength,
+    datePublished: file.fileDate,
+    versionType: 'release',
+  }
 }
 
-// ── Sub-components ───────────────────────────────────────────────────────────
+function normalizeMrVersion(ver: any): NormalizedVersion {
+  const mcVersions = (ver.game_versions ?? []).filter((v: string) => /^\d+\.\d+/.test(v))
+  const primaryFile = ver.files?.find((f: any) => f.primary) ?? ver.files?.[0]
+  return {
+    id: ver.id,
+    name: ver.name ?? '',
+    mcVersions,
+    loaders: (ver.loaders ?? []).map((l: string) => {
+      const name = l.charAt(0).toUpperCase() + l.slice(1)
+      return { name, color: LOADER_COLORS_BY_NAME[name] ?? DEFAULT_LOADER_COLOR }
+    }),
+    fileSize: primaryFile?.size,
+    datePublished: ver.date_published,
+    versionType: ver.version_type,
+  }
+}
 
-function StatBadge({ label, value }: { label: string; value: string }) {
+function loaderBadge(l: NormalizedLoader) {
   return (
-    <div className="flex flex-col items-center px-4 py-3 rounded-2xl border bg-gradient-to-br from-gray-800/90 to-gray-900 border-purple-500/25">
+    <span key={l.name} className={`px-1.5 py-0.5 rounded-full text-xs border font-medium ${l.color}`}>
+      {l.name}
+    </span>
+  )
+}
+
+// ── Sub-components ────────────────────────────────────────────────────────────
+
+function StatBadge({ label, value, borderClass = 'border-gray-700/50' }: { label: string; value: string; borderClass?: string }) {
+  return (
+    <div className={`flex flex-col items-center px-4 py-3 rounded-2xl border bg-gradient-to-br from-gray-800/90 to-gray-900 ${borderClass}`}>
       <span className="text-xs uppercase tracking-widest font-semibold mb-1 text-gray-500">{label}</span>
       <span className="font-bold text-sm text-white">{value}</span>
     </div>
   )
 }
 
-// ── Page ─────────────────────────────────────────────────────────────────────
+// ── Page ──────────────────────────────────────────────────────────────────────
 
-type Tab = 'descripcion' | 'screenshots' | 'versiones' | 'changelog'
+type Tab = 'descripcion' | 'galeria' | 'versiones' | 'changelog'
 
-export default function ModpackDetailPage() {
-  const { modpackId } = useParams<{ modpackId: string }>()
+export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
+  const { modpackId, projectId } = useParams<{ modpackId?: string; projectId?: string }>()
+  const id = source === 'cf' ? modpackId! : projectId!
   const navigate = useNavigate()
+
+  const theme = source === 'cf' ? {
+    blob1: 'bg-orange-600', blob2: 'bg-amber-600',
+    card: 'bg-gradient-to-br from-gray-800/90 via-orange-950/5 to-gray-900 border-orange-500/30',
+    statBorder: 'border-orange-500/25',
+    back: 'border-orange-500/30 text-orange-300 hover:bg-orange-500/10 hover:border-orange-400/50',
+    banner: 'from-orange-900/70 via-amber-900/40 to-yellow-900/60',
+    logoFallback: 'from-orange-500 to-amber-500',
+    title: 'from-orange-300 via-amber-300 to-orange-200',
+    authorBadge: 'bg-orange-500/10 text-orange-300 border-orange-500/25',
+    installBtn: 'from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500 shadow-lg shadow-orange-900/25',
+    spinner: 'text-orange-400',
+    tabs: 'from-orange-600 to-amber-600',
+    gallery: 'border-orange-500/20 hover:border-orange-400/50',
+    versionInput: 'focus:border-orange-500/50 focus:ring-orange-500/20',
+    versionRow: 'hover:bg-orange-500/5',
+    versionBtn: 'from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500',
+    changelogActive: 'bg-orange-500/20 border-orange-500/40 text-orange-300',
+    descLink: '[&_a]:text-orange-400 [&_a:hover]:underline',
+    modalIcon: 'bg-orange-500/15', modalIconCl: 'text-orange-400',
+    modalBtn: 'from-orange-600 to-amber-600 hover:from-orange-500 hover:to-amber-500',
+    modalInput: 'focus:border-orange-500/60',
+  } : {
+    blob1: 'bg-green-600', blob2: 'bg-emerald-600',
+    card: 'bg-gradient-to-br from-gray-800/90 via-green-950/10 to-gray-900 border-green-500/30',
+    statBorder: 'border-green-500/25',
+    back: 'border-green-500/30 text-green-300 hover:bg-green-500/10 hover:border-green-400/50',
+    banner: 'from-green-900/70 via-emerald-900/40 to-teal-900/60',
+    logoFallback: 'from-green-500 to-emerald-500',
+    title: 'from-green-300 via-emerald-300 to-green-200',
+    authorBadge: 'bg-green-500/10 text-green-300 border-green-500/25',
+    installBtn: 'from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500 shadow-lg shadow-green-900/25',
+    spinner: 'text-green-400',
+    tabs: 'from-green-600 to-emerald-600',
+    gallery: 'border-green-500/20 hover:border-green-400/50',
+    versionInput: 'focus:border-green-500/50 focus:ring-green-500/20',
+    versionRow: 'hover:bg-green-500/5',
+    versionBtn: 'from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500',
+    changelogActive: 'bg-green-500/20 border-green-500/40 text-green-300',
+    descLink: '[&_a]:text-green-400 [&_a:hover]:underline',
+    modalIcon: 'bg-green-500/15', modalIconCl: 'text-green-400',
+    modalBtn: 'from-green-600 to-emerald-600 hover:from-green-500 hover:to-emerald-500',
+    modalInput: 'focus:border-green-500/60',
+  }
   const { startInstall, finishInstall, installing: activeInstalls, progress } = useInstall()
-  const [mod, setMod] = useState<CfMod | null>(null)
-  const [description, setDescription] = useState('')
-  const [files, setFiles] = useState<CfFile[]>([])
-  const [selectedFileId, setSelectedFileId] = useState<number | null>(null)
+
+  // ── Raw source-specific state ─────────────────────────────────────────────
+  const [cfMod, setCfMod] = useState<CfMod | null>(null)
+  const [cfDescription, setCfDescription] = useState('')
+  const [cfFiles, setCfFiles] = useState<CfFile[]>([])
+  const [mrProject, setMrProject] = useState<any>(null)
+  const [mrVersions, setMrVersions] = useState<any[]>([])
+
+  // ── Common state ──────────────────────────────────────────────────────────
   const [loading, setLoading] = useState(true)
-  const isAnyInstalling = activeInstalls.length > 0
-  const isFileInstalling = (fileId: number) => activeInstalls.some((i) => i.fileId === fileId)
-  const [done, setDone] = useState(false)
   const [error, setError] = useState('')
   const [tab, setTab] = useState<Tab>('descripcion')
   const [lightbox, setLightbox] = useState<string | null>(null)
-  const [installedFileIds, setInstalledFileIds] = useState<Set<number>>(new Set())
-  const [installModal, setInstallModal] = useState<{ fileId: number } | null>(null)
+  const [installedIds, setInstalledIds] = useState<Set<string>>(new Set())
+  const [installingVersionId, setInstallingVersionId] = useState<string | null>(null)
+  const [done, setDone] = useState(false)
+  const [installError, setInstallError] = useState('')
+  const [installModal, setInstallModal] = useState<{ versionId: string } | null>(null)
   const [modalName, setModalName] = useState('')
   const [modalNameError, setModalNameError] = useState('')
   const [versionSearch, setVersionSearch] = useState('')
   const [versionMcFilter, setVersionMcFilter] = useState('')
   const [versionLoaderFilter, setVersionLoaderFilter] = useState('')
+
+  // CF-only changelog
   const [changelog, setChangelog] = useState<string | null>(null)
   const [changelogLoading, setChangelogLoading] = useState(false)
   const [changelogFileId, setChangelogFileId] = useState<number | null>(null)
   const [changelogViewFileId, setChangelogViewFileId] = useState<number | null>(null)
 
+  const isAnyInstalling = installingVersionId !== null
+
+  // ── Load installed IDs ────────────────────────────────────────────────────
   useEffect(() => {
     window.launcher.instances.list().then((list: any[]) => {
-      setInstalledFileIds(new Set(list.filter((i) => i.cfMeta?.fileId).map((i) => i.cfMeta.fileId as number)))
+      setInstalledIds(
+        source === 'cf'
+          ? new Set(list.filter((i) => i.cfMeta?.fileId).map((i) => String(i.cfMeta.fileId)))
+          : new Set(list.filter((i) => i.mrMeta?.versionId).map((i) => i.mrMeta.versionId as string)),
+      )
     }).catch(() => {})
-  }, [])
+  }, [source])
 
+  // ── Load data ─────────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!modpackId) return
-    const id = parseInt(modpackId)
-    Promise.all([
-      window.launcher.cf.getMod(id),
-      window.launcher.cf.getModDescription(id),
-      window.launcher.cf.getModFiles(id),
-    ]).then(([modResp, desc, filesResp]) => {
-      setMod(modResp?.data ?? null)
-      setDescription(desc ?? '')
-      const fileList: CfFile[] = filesResp?.data ?? []
-      setFiles(fileList)
-      if (fileList.length > 0) {
-        setSelectedFileId(fileList[0].id)
-        setChangelogViewFileId(fileList[0].id)
-      }
-    }).catch((e) => setError(e.message)).finally(() => setLoading(false))
-  }, [modpackId])
+    if (!id) return
+    setLoading(true)
+    if (source === 'cf') {
+      const numId = parseInt(id)
+      Promise.all([
+        window.launcher.cf.getMod(numId),
+        window.launcher.cf.getModDescription(numId),
+        window.launcher.cf.getModFiles(numId),
+      ]).then(([modResp, desc, filesResp]) => {
+        const mod = modResp?.data ?? null
+        const fileList: CfFile[] = filesResp?.data ?? []
+        setCfMod(mod)
+        setCfDescription(desc ?? '')
+        setCfFiles(fileList)
+        if (fileList.length > 0) setChangelogViewFileId(fileList[0].id)
+      }).catch((e) => setError(e.message)).finally(() => setLoading(false))
+    } else {
+      Promise.all([
+        window.launcher.mr.getProject(id),
+        window.launcher.mr.getProjectVersions(id),
+      ]).then(([proj, vers]) => {
+        setMrProject(proj)
+        setMrVersions(vers ?? [])
+      }).catch((e) => setError(e?.message ?? 'Error al cargar el modpack')).finally(() => setLoading(false))
+    }
+  }, [id, source])
 
-
+  // CF changelog loader
   useEffect(() => {
-    if (tab !== 'changelog' || !mod || !changelogViewFileId) return
+    if (source !== 'cf' || tab !== 'changelog' || !cfMod || !changelogViewFileId) return
     if (changelogFileId === changelogViewFileId) return
     setChangelogLoading(true)
     setChangelog(null)
-    window.launcher.cf.getFileChangelog(mod.id, changelogViewFileId)
+    window.launcher.cf.getFileChangelog(cfMod.id, changelogViewFileId)
       .then((html) => { setChangelog(html); setChangelogFileId(changelogViewFileId) })
       .catch(() => setChangelog(''))
       .finally(() => setChangelogLoading(false))
-  }, [tab, changelogViewFileId, mod?.id])
+  }, [source, tab, changelogViewFileId, cfMod?.id])
 
-  function openInstallModal(fileId: number) {
-    if (installedFileIds.has(fileId)) return
-    const defaultName = files.find((f) => f.id === fileId)?.displayName ?? mod?.name ?? ''
-    setModalName(defaultName)
+  // ── Normalized data ───────────────────────────────────────────────────────
+
+  const normalizedVersions: NormalizedVersion[] = source === 'cf'
+    ? (() => {
+        const loaderNums = [...new Set(
+          ((cfMod as any)?.latestFilesIndexes ?? []).map((f: any) => f.modLoader).filter(Boolean) as number[]
+        )]
+        const fallbackMcVers: string[] = [...new Set<string>(
+          ((cfMod as any)?.latestFilesIndexes ?? []).map((f: any) => f.gameVersion).filter((v: any): v is string => !!v && /^\d+\.\d+/.test(v))
+        )]
+        const fallbackLoader = loaderNums.length === 1 ? loaderNums[0] : null
+        return cfFiles.map((f) => normalizeCfFile(f, fallbackMcVers, fallbackLoader))
+      })()
+    : mrVersions.map(normalizeMrVersion)
+
+  const name = source === 'cf' ? (cfMod?.name ?? '') : (mrProject?.title ?? '')
+  const summary = source === 'cf' ? cfMod?.summary : mrProject?.description
+  const logoUrl: string | undefined = source === 'cf' ? cfMod?.logo?.url : mrProject?.icon_url
+  const description: string = source === 'cf' ? cfDescription : (mrProject?.body ?? '')
+  const descriptionIsHtml = source === 'cf'
+
+  const authors: string[] = source === 'cf'
+    ? ((cfMod as any)?.authors ?? []).map((a: any) => a.name)
+    : mrProject?.team ? [mrProject.team] : []
+
+  const categories: { name: string; iconUrl?: string }[] = source === 'cf'
+    ? ((cfMod as any)?.categories ?? []).slice(0, 6).map((c: any) => ({ name: c.name, iconUrl: c.iconUrl }))
+    : (mrProject?.categories ?? []).slice(0, 8).map((c: string) => ({ name: c }))
+
+  const heroLoaders: NormalizedLoader[] = source === 'cf'
+    ? [...new Set(((cfMod as any)?.latestFilesIndexes ?? []).map((f: any) => f.modLoader).filter(Boolean) as number[])]
+        .map((num) => {
+          const n = CF_LOADER_ID_TO_NAME[num]
+          return n ? { name: n, color: LOADER_COLORS_BY_NAME[n] ?? DEFAULT_LOADER_COLOR } : null
+        })
+        .filter((l): l is NormalizedLoader => l !== null)
+    : (mrProject?.loaders ?? []).map((l: string) => {
+        const n = l.charAt(0).toUpperCase() + l.slice(1)
+        return { name: n, color: LOADER_COLORS_BY_NAME[n] ?? DEFAULT_LOADER_COLOR }
+      })
+
+  const heroMcVersions: string[] = source === 'cf'
+    ? [...new Set(((cfMod as any)?.latestFilesIndexes ?? []).map((f: any) => f.gameVersion).filter((v: any): v is string => !!v && /^\d+\.\d+/.test(v)))]
+    : (mrProject?.game_versions ?? []).filter((v: string) => /^\d+\.\d+/.test(v))
+
+  const downloads = source === 'cf' ? (cfMod?.downloadCount ?? 0) : (mrProject?.downloads ?? 0)
+  const stat2Label = source === 'cf' ? 'Popularidad' : 'Seguidores'
+  const stat2Value = source === 'cf'
+    ? ((cfMod as any)?.gamePopularityRank > 0 ? `#${((cfMod as any).gamePopularityRank).toLocaleString()}` : '—')
+    : formatDownloads(mrProject?.followers ?? 0)
+  const dateCreated = source === 'cf' ? (cfMod as any)?.dateReleased : mrProject?.published
+  const dateModified = source === 'cf' ? cfMod?.dateModified : mrProject?.updated
+
+  const gallery: { id: string; title?: string; url: string; thumbUrl: string }[] = source === 'cf'
+    ? ((cfMod as any)?.screenshots ?? []).map((s: any) => ({ id: String(s.id), title: s.title, url: s.url, thumbUrl: s.thumbnailUrl ?? s.url }))
+    : (mrProject?.gallery ?? []).map((g: any, i: number) => ({ id: String(i), title: g.title, url: g.url, thumbUrl: g.url }))
+
+  const externalUrl: string | undefined = source === 'cf'
+    ? ((cfMod as any)?.links?.websiteUrl ?? ((cfMod as any)?.slug ? `https://www.curseforge.com/minecraft/modpacks/${(cfMod as any).slug}` : undefined))
+    : (mrProject?.slug ? `https://modrinth.com/modpack/${mrProject.slug}` : undefined)
+  const externalLabel = source === 'cf' ? 'CurseForge' : 'Modrinth'
+
+  // ── Filters ───────────────────────────────────────────────────────────────
+
+  const availableMcVersionsFilter = [...new Set(normalizedVersions.flatMap((v) => v.mcVersions))]
+    .sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
+  const availableLoadersFilter = [...new Set(normalizedVersions.flatMap((v) => v.loaders.map((l) => l.name)))]
+
+  const filteredVersions = normalizedVersions.filter((v) => {
+    if (versionSearch && !v.name.toLowerCase().includes(versionSearch.toLowerCase())) return false
+    if (versionMcFilter && !v.mcVersions.includes(versionMcFilter)) return false
+    if (versionLoaderFilter && !v.loaders.some((l) => l.name === versionLoaderFilter)) return false
+    return true
+  })
+  const hasVersionFilters = !!versionSearch || !!versionMcFilter || !!versionLoaderFilter
+
+  const firstVersion = normalizedVersions[0]
+  const isFirstInstalled = firstVersion ? installedIds.has(firstVersion.id) : false
+
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'descripcion', label: 'Descripción' },
+    ...(source === 'cf' ? [{ id: 'changelog' as Tab, label: 'Changelog' }] : []),
+    ...(gallery.length > 0 ? [{ id: 'galeria' as Tab, label: `${source === 'cf' ? 'Screenshots' : 'Galería'} (${gallery.length})` }] : []),
+    { id: 'versiones', label: `Versiones (${normalizedVersions.length})` },
+  ]
+
+  // ── Install ───────────────────────────────────────────────────────────────
+
+  function openInstallModal(versionId: string) {
+    if (installedIds.has(versionId) || isAnyInstalling) return
+    const ver = normalizedVersions.find((v) => v.id === versionId)
+    setModalName(ver?.name ?? name)
     setModalNameError('')
-    setInstallModal({ fileId })
+    setInstallModal({ versionId })
   }
 
   async function confirmInstall() {
-    if (!installModal || !modalName.trim() || !mod) return
+    if (!installModal || !modalName.trim()) return
     try {
       const allInstances = await window.launcher.instances.list()
       if (allInstances.some((i: any) => i.name.toLowerCase() === modalName.trim().toLowerCase())) {
@@ -172,96 +380,62 @@ export default function ModpackDetailPage() {
         return
       }
     } catch { /* ignore */ }
-    const { fileId } = installModal
+    const { versionId } = installModal
     setInstallModal(null)
-    await handleInstall(fileId, modalName.trim())
+    await handleInstall(versionId, modalName.trim())
   }
 
-  async function handleInstall(fileId: number, customName: string) {
-    if (!mod) return
-    if (installedFileIds.has(fileId)) return
-    const installId = `cf-${mod.id}-${fileId}`
-    setError('')
+  async function handleInstall(versionId: string, customName: string) {
+    const installId = source === 'cf' ? `cf-${cfMod?.id}-${versionId}` : `mr-${mrProject?.id}-${versionId}`
+    setInstallingVersionId(versionId)
+    setInstallError('')
     setDone(false)
-    startInstall(installId, customName, fileId)
+    startInstall(installId, customName, source === 'cf' ? parseInt(versionId) : undefined, source)
     try {
-      const fileVersion = files.find((f) => f.id === fileId)?.displayName ?? undefined
-      await window.launcher.cf.installModpack(mod.id, fileId, customName, mod.logo?.url, fileVersion, (mod as any).slug)
+      if (source === 'cf') {
+        const fileId = parseInt(versionId)
+        const fileVersion = cfFiles.find((f) => f.id === fileId)?.displayName
+        await window.launcher.cf.installModpack(cfMod!.id, fileId, customName, cfMod!.logo?.url, fileVersion, (cfMod as any).slug)
+      } else {
+        await window.launcher.mr.installModpack(mrProject.id, versionId, customName, mrProject.icon_url)
+      }
+      setInstalledIds((prev) => new Set([...prev, versionId]))
       setDone(true)
       finishInstall(installId)
       setTimeout(() => navigate('/instances'), 2000)
     } catch (e: any) {
-      if (!e?.message?.includes('CANCELLED')) setError(e.message ?? 'Se ha parado la instalación del modpack')
+      if (!e?.message?.includes('CANCELLED')) setInstallError(e.message ?? 'Error al instalar el modpack')
       finishInstall(installId)
+    } finally {
+      setInstallingVersionId(null)
     }
   }
 
-  // ── Loading ──────────────────────────────────────────────────────────────
+  // ── Loading / error ────────────────────────────────────────────────────────
 
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 bg-[radial-gradient(ellipse_at_top,_#1e1040_0%,_#0f0f1a_60%,_#0a0a14_100%)]">
-        <Loader2 size={24} className="text-purple-400 animate-spin" />
+        <Loader2 size={24} className={`${theme.spinner} animate-spin`} />
       </div>
     )
   }
 
-  if (!mod) {
+  const hasData = source === 'cf' ? !!cfMod : !!mrProject
+
+  if (!hasData) {
     return (
       <div className="p-6">
         <button
           onClick={() => navigate('/catalog')}
-          className="flex items-center gap-2 text-sm mb-6 px-3.5 py-2 rounded-xl border border-purple-500/30 text-purple-300 hover:bg-purple-500/10 transition-all"
+          className={`flex items-center gap-2 text-sm mb-6 px-3.5 py-2 rounded-xl border ${theme.back} transition-all`}
         >
           <ArrowLeft size={15} /> Volver al catálogo
         </button>
-        <p className="text-gray-500">Modpack no encontrado</p>
+        <p className="text-gray-500">{error || 'Modpack no encontrado'}</p>
       </div>
     )
   }
-
-  // ── Derived data from full CF API response ────────────────────────────────
-
-  const modAny = mod as any
-  const screenshots: { id: number; title?: string; url: string; thumbnailUrl: string }[] = modAny.screenshots ?? []
-  const authors: { id: number; name: string; url: string }[] = modAny.authors ?? []
-  const dateReleased: string | undefined = modAny.dateReleased
-  const popularityRank: number = modAny.gamePopularityRank ?? 0
-
-  const loaderNums = [...new Set(
-    (mod.latestFilesIndexes ?? []).map((f) => f.modLoader).filter((l): l is number => !!l)
-  )]
-  const mcVersions = [...new Set(
-    (mod.latestFilesIndexes ?? []).map((f) => f.gameVersion).filter((v) => !!v && /^\d+\.\d+/.test(v))
-  )]
-
-  const isSelectedInstalled = selectedFileId !== null && installedFileIds.has(selectedFileId)
-
-  // ── Version filters ────────────────────────────────────────────────────────
-
-  const availableMcVersions = [...new Set(
-    files.flatMap((f) => (f.gameVersions ?? []).filter((v) => /^\d+\.\d+/.test(v)))
-  )].sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))
-
-  const availableLoaders = [...new Set(
-    files.map(getFileLoader).filter((l): l is number => l !== null)
-  )]
-
-  const filteredFiles = files.filter((f) => {
-    if (versionSearch && !(f.displayName ?? f.fileName).toLowerCase().includes(versionSearch.toLowerCase())) return false
-    if (versionMcFilter && !(f.gameVersions ?? []).includes(versionMcFilter)) return false
-    if (versionLoaderFilter && getFileLoader(f) !== Number(versionLoaderFilter)) return false
-    return true
-  })
-
-  const hasVersionFilters = !!versionSearch || !!versionMcFilter || !!versionLoaderFilter
-
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'descripcion', label: 'Descripción' },
-    { id: 'changelog',   label: 'Changelog' },
-    { id: 'screenshots', label: `Screenshots${screenshots.length ? ` (${screenshots.length})` : ''}` },
-    { id: 'versiones',   label: `Versiones${files.length ? ` (${files.length})` : ''}` },
-  ]
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -270,8 +444,8 @@ export default function ModpackDetailPage() {
 
       {/* Decorative blobs */}
       <div aria-hidden="true" className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute -top-32 -right-32 w-[480px] h-[480px] rounded-full blur-3xl opacity-15 bg-purple-600" />
-        <div className="absolute -bottom-40 -left-40 w-[420px] h-[420px] rounded-full blur-3xl opacity-10 bg-pink-600" />
+        <div className={`absolute -top-32 -right-32 w-[480px] h-[480px] rounded-full blur-3xl opacity-15 ${theme.blob1}`} />
+        <div className={`absolute -bottom-40 -left-40 w-[420px] h-[420px] rounded-full blur-3xl opacity-10 ${theme.blob2}`} />
       </div>
 
       <div className="relative z-10 max-w-5xl mx-auto px-4 md:px-6 pt-6 pb-16">
@@ -279,22 +453,22 @@ export default function ModpackDetailPage() {
         {/* Back button */}
         <button
           onClick={() => navigate('/catalog')}
-          className="flex items-center gap-2 text-sm mb-6 px-3.5 py-2 rounded-xl border border-purple-500/30 text-purple-300 hover:bg-purple-500/10 hover:border-purple-400/50 transition-all hover:scale-[1.02] active:scale-95"
+          className={`flex items-center gap-2 text-sm mb-6 px-3.5 py-2 rounded-xl border ${theme.back} transition-all hover:scale-[1.02] active:scale-95`}
         >
           <ArrowLeft size={15} />
           Volver al catálogo
         </button>
 
         {/* ── Hero card ─────────────────────────────────────────────────────── */}
-        <div className={`rounded-2xl border overflow-hidden mb-5 ${CARD_CLASS}`}>
+        <div className={`rounded-2xl border overflow-hidden mb-5 ${theme.card}`}>
 
           {/* Banner */}
           <div className="h-20 sm:h-24 relative overflow-hidden">
-            {mod.logo?.url && (
-              <img src={mod.logo.url} alt="" aria-hidden="true"
+            {logoUrl && (
+              <img src={logoUrl} alt="" aria-hidden="true"
                 className="absolute inset-0 w-full h-full object-cover scale-110 blur-xl opacity-25" />
             )}
-            <div className="absolute inset-0 bg-gradient-to-br from-purple-900/70 via-indigo-900/40 to-pink-900/60" />
+            <div className={`absolute inset-0 bg-gradient-to-br ${theme.banner}`} />
             <div className="absolute inset-0 bg-gradient-to-t from-gray-900/60 to-transparent" />
           </div>
 
@@ -303,15 +477,15 @@ export default function ModpackDetailPage() {
 
             {/* Logo */}
             <div className="flex-shrink-0">
-              {mod.logo?.url ? (
+              {logoUrl ? (
                 <img
-                  src={mod.logo.url}
-                  alt={mod.name}
+                  src={logoUrl}
+                  alt={name}
                   className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-4 border-gray-900 shadow-xl"
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
                 />
               ) : (
-                <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl border-4 border-gray-900 bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-3xl shadow-xl">
+                <div className={`w-20 h-20 sm:w-24 sm:h-24 rounded-2xl border-4 border-gray-900 bg-gradient-to-br ${theme.logoFallback} flex items-center justify-center text-3xl shadow-xl`}>
                   📦
                 </div>
               )}
@@ -319,52 +493,50 @@ export default function ModpackDetailPage() {
 
             {/* Info */}
             <div className="flex-1 min-w-0 pt-2 sm:pt-8">
-              <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight mb-1.5 leading-tight bg-gradient-to-r from-purple-300 via-pink-300 to-purple-200 bg-clip-text text-transparent">
-                {mod.name}
+              <h1 className={`text-2xl sm:text-3xl font-extrabold tracking-tight mb-1.5 leading-tight bg-gradient-to-r ${theme.title} bg-clip-text text-transparent`}>
+                {name}
               </h1>
 
-              {mod.summary && (
-                <p className="text-sm mb-3 leading-relaxed text-gray-400">{mod.summary}</p>
+              {summary && (
+                <p className="text-sm mb-3 leading-relaxed text-gray-400">{summary}</p>
               )}
 
               {authors.length > 0 && (
                 <div className="flex items-center gap-2 flex-wrap mb-3">
                   <span className="text-xs font-semibold uppercase tracking-widest text-gray-600">Por</span>
-                  {authors.map((author) => (
-                    <span key={author.id} className="text-xs px-2.5 py-1 rounded-full border bg-purple-500/10 text-purple-300 border-purple-500/25 font-medium">
-                      {author.name}
+                  {authors.map((author, i) => (
+                    <span key={i} className={`text-xs px-2.5 py-1 rounded-full border ${theme.authorBadge} font-medium`}>
+                      {author}
                     </span>
                   ))}
                 </div>
               )}
 
-              {modAny.categories?.length > 0 && (
+              {categories.length > 0 && (
                 <div className="flex flex-wrap gap-1.5 mb-3">
-                  {(modAny.categories as any[]).slice(0, 6).map((cat: any) => (
-                    <span key={cat.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border bg-orange-500/10 text-orange-300 border-orange-500/20 font-medium">
-                      {cat.iconUrl && (
-                        <img src={cat.iconUrl} alt="" className="w-3 h-3 object-contain opacity-80" />
-                      )}
+                  {categories.map((cat, i) => (
+                    <span key={i} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs border bg-orange-500/10 text-orange-300 border-orange-500/20 font-medium capitalize">
+                      {cat.iconUrl && <img src={cat.iconUrl} alt="" className="w-3 h-3 object-contain opacity-80" />}
                       {cat.name}
                     </span>
                   ))}
                 </div>
               )}
 
-              {(loaderNums.length > 0 || mcVersions.length > 0) && (
+              {(heroLoaders.length > 0 || heroMcVersions.length > 0) && (
                 <div className="flex flex-wrap gap-1.5 mb-4">
-                  {loaderNums.map((l) => LOADER_NAMES[l] && (
-                    <span key={l} className={`px-2 py-0.5 rounded-full text-xs border font-medium ${LOADER_COLORS[l] ?? 'bg-gray-700 text-gray-300 border-gray-600'}`}>
-                      {LOADER_NAMES[l]}
+                  {heroLoaders.map((l) => (
+                    <span key={l.name} className={`px-2 py-0.5 rounded-full text-xs border font-medium ${l.color}`}>
+                      {l.name}
                     </span>
                   ))}
-                  {mcVersions.slice(0, 4).map((v) => (
+                  {heroMcVersions.slice(0, 4).map((v) => (
                     <span key={v} className="px-2 py-0.5 rounded-lg text-xs border font-mono bg-indigo-500/10 text-indigo-300 border-indigo-500/20">
                       {v}
                     </span>
                   ))}
-                  {mcVersions.length > 4 && (
-                    <span className="text-xs self-center text-gray-600">+{mcVersions.length - 4} más</span>
+                  {heroMcVersions.length > 4 && (
+                    <span className="text-xs self-center text-gray-600">+{heroMcVersions.length - 4} más</span>
                   )}
                 </div>
               )}
@@ -372,28 +544,44 @@ export default function ModpackDetailPage() {
               {/* Install action */}
               <div className="flex flex-col gap-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  {(selectedFileId === null || !isFileInstalling(selectedFileId)) && !done && !isSelectedInstalled && (
+
+                  {!isAnyInstalling && !done && firstVersion && !isFirstInstalled && (
                     <button
-                      onClick={() => selectedFileId && openInstallModal(selectedFileId)}
-                      disabled={!selectedFileId || isAnyInstalling}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-lg shadow-purple-900/25 transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+                      onClick={() => openInstallModal(firstVersion.id)}
+                      className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-semibold text-sm bg-gradient-to-r ${theme.installBtn} text-white transition-all hover:scale-[1.02] active:scale-95`}
                     >
                       <Download size={15} />
-                      {isAnyInstalling ? 'Instalación en curso...' : 'Instalar modpack'}
+                      Instalar modpack
                     </button>
                   )}
 
-                  {(selectedFileId === null || !isFileInstalling(selectedFileId)) && !done && isSelectedInstalled && (
+                  {!isAnyInstalling && !done && firstVersion && isFirstInstalled && (
                     <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-500/10 border border-green-500/25">
                       <Check size={15} className="text-green-400" />
-                      <span className="text-green-400 text-sm font-medium">Esta versión ya está instalada</span>
+                      <span className="text-green-400 text-sm font-medium">Última versión instalada</span>
                     </div>
                   )}
 
-                  {selectedFileId !== null && isFileInstalling(selectedFileId) && progress && !done && (
+                  {isAnyInstalling && installingVersionId === firstVersion?.id && progress && (
                     <div className="max-w-xs">
                       <ProgressBar percent={progress.percent} label={progress.stage} />
                     </div>
+                  )}
+
+                  {isAnyInstalling && installingVersionId === firstVersion?.id && !progress && (
+                    <div className={`flex items-center gap-2 text-sm ${theme.spinner}`}>
+                      <Loader2 size={14} className="animate-spin" />
+                      Preparando instalación...
+                    </div>
+                  )}
+
+                  {isAnyInstalling && (
+                    <button
+                      onClick={() => source === 'cf' ? window.launcher.cf.cancelInstall() : window.launcher.mr.cancelInstall()}
+                      className="text-xs px-3 py-2 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+                    >
+                      Cancelar
+                    </button>
                   )}
 
                   {done && (
@@ -403,23 +591,23 @@ export default function ModpackDetailPage() {
                     </div>
                   )}
 
-                  {(modAny.slug || modAny.links?.websiteUrl) && (
+                  {externalUrl && (
                     <a
-                      href={modAny.links?.websiteUrl ?? `https://www.curseforge.com/minecraft/modpacks/${modAny.slug}`}
+                      href={externalUrl}
                       target="_blank"
                       rel="noreferrer"
                       className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold border border-orange-500/30 text-orange-300 hover:bg-orange-500/10 hover:border-orange-400/50 transition-all hover:scale-[1.02] active:scale-95"
                     >
                       <ExternalLink size={14} />
-                      CurseForge
+                      {externalLabel}
                     </a>
                   )}
                 </div>
 
-                {error && (
+                {installError && (
                   <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-500/10 border border-red-500/25">
                     <AlertCircle size={15} className="text-red-400 shrink-0" />
-                    <p className="text-red-400 text-sm">{error}</p>
+                    <p className="text-red-400 text-sm">{installError}</p>
                   </div>
                 )}
               </div>
@@ -429,10 +617,10 @@ export default function ModpackDetailPage() {
 
         {/* ── Stats grid ────────────────────────────────────────────────────── */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
-          <StatBadge label="Descargas"   value={formatDownloads(mod.downloadCount)} />
-          <StatBadge label="Publicado"   value={formatDate(dateReleased)} />
-          <StatBadge label="Actualizado" value={formatDate(mod.dateModified)} />
-          <StatBadge label="Popularidad" value={popularityRank > 0 ? `#${popularityRank.toLocaleString()}` : '—'} />
+          <StatBadge label="Descargas"   value={formatDownloads(downloads)} borderClass={theme.statBorder} />
+          <StatBadge label={stat2Label}  value={stat2Value} borderClass={theme.statBorder} />
+          <StatBadge label="Publicado"   value={formatDate(dateCreated)} borderClass={theme.statBorder} />
+          <StatBadge label="Actualizado" value={formatDate(dateModified)} borderClass={theme.statBorder} />
         </div>
 
         {/* ── Tabs ──────────────────────────────────────────────────────────── */}
@@ -445,7 +633,7 @@ export default function ModpackDetailPage() {
               onClick={() => setTab(t.id)}
               className={`flex-1 py-2 px-3 rounded-xl text-sm font-medium transition-all ${
                 tab === t.id
-                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-sm'
+                  ? `bg-gradient-to-r ${theme.tabs} text-white shadow-sm`
                   : 'text-gray-400 hover:text-gray-200 hover:bg-gray-700/50'
               }`}
             >
@@ -455,36 +643,40 @@ export default function ModpackDetailPage() {
         </div>
 
         {/* ── Tab content ───────────────────────────────────────────────────── */}
-        <section className={`rounded-2xl border p-5 sm:p-6 ${CARD_CLASS}`}>
+        <section className={`rounded-2xl border p-5 sm:p-6 ${theme.card}`}>
 
           {/* Descripción */}
           {tab === 'descripcion' && (
             description ? (
               <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40">
-                <div
-                  className="prose prose-invert prose-sm max-w-none text-gray-300 [&_img]:max-w-full [&_a]:text-purple-400 [&_a]:no-underline [&_a:hover]:underline"
-                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(description) }}
-                />
+                {descriptionIsHtml ? (
+                  <div
+                    className={`prose prose-invert prose-sm max-w-none text-gray-300 [&_img]:max-w-full ${theme.descLink} [&_a]:no-underline`}
+                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(description) }}
+                  />
+                ) : (
+                  <pre className="whitespace-pre-wrap text-sm text-gray-300 leading-relaxed font-sans">{description}</pre>
+                )}
               </div>
             ) : (
               <p className="text-sm text-gray-500">Sin descripción disponible.</p>
             )
           )}
 
-          {/* Screenshots */}
-          {tab === 'screenshots' && (
-            screenshots.length > 0 ? (
+          {/* Galería / Screenshots */}
+          {tab === 'galeria' && (
+            gallery.length > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {screenshots.map((ss) => (
+                {gallery.map((img) => (
                   <button
-                    key={ss.id}
-                    onClick={() => setLightbox(ss.url || ss.thumbnailUrl)}
-                    className="aspect-video overflow-hidden rounded-xl border border-purple-500/20 hover:border-purple-400/50 transition-all hover:-translate-y-0.5 hover:shadow-xl group"
-                    aria-label={ss.title || 'Ver screenshot en grande'}
+                    key={img.id}
+                    onClick={() => setLightbox(img.url)}
+                    className={`aspect-video overflow-hidden rounded-xl border ${theme.gallery} transition-all hover:-translate-y-0.5 hover:shadow-xl group`}
+                    aria-label={img.title || 'Ver imagen en grande'}
                   >
                     <img
-                      src={ss.thumbnailUrl}
-                      alt={ss.title || `Screenshot ${ss.id}`}
+                      src={img.thumbUrl}
+                      alt={img.title || 'Imagen'}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       loading="lazy"
                     />
@@ -492,13 +684,13 @@ export default function ModpackDetailPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-gray-500">No hay screenshots disponibles.</p>
+              <p className="text-sm text-gray-500">No hay imágenes disponibles.</p>
             )
           )}
 
           {/* Versiones */}
           {tab === 'versiones' && (
-            files.length > 0 ? (
+            normalizedVersions.length > 0 ? (
               <div>
                 {/* Filter bar */}
                 <div className="flex flex-col sm:flex-row gap-2 mb-4">
@@ -509,31 +701,25 @@ export default function ModpackDetailPage() {
                       value={versionSearch}
                       onChange={(e) => setVersionSearch(e.target.value)}
                       placeholder="Buscar versión..."
-                      className="w-full bg-gray-800/80 border border-gray-700/80 rounded-xl pl-8 pr-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                      className={`w-full bg-gray-800/80 border border-gray-700/80 rounded-xl pl-8 pr-3 py-2 text-sm text-gray-200 placeholder-gray-500 focus:outline-none ${theme.versionInput} focus:ring-1 transition-all`}
                     />
                   </div>
-                  {availableMcVersions.length > 0 && (
+                  {availableMcVersionsFilter.length > 0 && (
                     <FilterSelect
                       icon={Tag}
                       value={versionMcFilter}
                       onChange={setVersionMcFilter}
                       placeholder="Todas las versiones"
-                      options={[
-                        { value: '', label: 'Todas las versiones' },
-                        ...availableMcVersions.map((v) => ({ value: v, label: v })),
-                      ]}
+                      options={[{ value: '', label: 'Todas las versiones' }, ...availableMcVersionsFilter.map((v) => ({ value: v, label: v }))]}
                     />
                   )}
-                  {availableLoaders.length > 1 && (
+                  {availableLoadersFilter.length > 1 && (
                     <FilterSelect
                       icon={Layers}
                       value={versionLoaderFilter}
                       onChange={setVersionLoaderFilter}
                       placeholder="Todos los loaders"
-                      options={[
-                        { value: '', label: 'Todos los loaders' },
-                        ...availableLoaders.map((l) => ({ value: String(l), label: LOADER_NAMES[l] ?? `Loader ${l}` })),
-                      ]}
+                      options={[{ value: '', label: 'Todos los loaders' }, ...availableLoadersFilter.map((l) => ({ value: l, label: l }))]}
                     />
                   )}
                   {hasVersionFilters && (
@@ -546,12 +732,12 @@ export default function ModpackDetailPage() {
                   )}
                 </div>
 
-                {filteredFiles.length === 0 ? (
+                {filteredVersions.length === 0 ? (
                   <p className="text-sm text-gray-500 py-4 text-center">No hay versiones que coincidan con los filtros.</p>
                 ) : (
                   <div className="overflow-x-auto">
                     {hasVersionFilters && (
-                      <p className="text-xs text-gray-500 mb-3">{filteredFiles.length} de {files.length} versiones</p>
+                      <p className="text-xs text-gray-500 mb-3">{filteredVersions.length} de {normalizedVersions.length} versiones</p>
                     )}
                     <table className="w-full text-sm">
                       <thead>
@@ -565,20 +751,28 @@ export default function ModpackDetailPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-700/40">
-                        {filteredFiles.map((file) => {
-                          const loaderNum = getFileLoader(file) ?? (loaderNums.length === 1 ? loaderNums[0] : null)
-                          const fileMcVers = getFileMcVersions(file)
-                          const displayMcVers = fileMcVers.length > 0 ? fileMcVers : (mcVersions.length === 1 ? mcVersions : [])
+                        {filteredVersions.map((ver) => {
+                          const isInstalled = installedIds.has(ver.id)
+                          const isThisInstalling = installingVersionId === ver.id
                           return (
-                            <tr key={file.id} className="transition-colors hover:bg-purple-500/5">
+                            <tr key={ver.id} className={`transition-colors ${theme.versionRow}`}>
                               <td className="py-3 pr-4">
-                                <span className="line-clamp-1 text-xs font-medium text-gray-200">
-                                  {file.displayName || file.fileName}
-                                </span>
+                                <div>
+                                  <span className="line-clamp-1 text-xs font-medium text-gray-200">{ver.name}</span>
+                                  {ver.versionType && ver.versionType !== 'release' && (
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border mt-0.5 inline-block ${
+                                      ver.versionType === 'beta'
+                                        ? 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20'
+                                        : 'bg-gray-500/15 text-gray-400 border-gray-500/25'
+                                    }`}>
+                                      {ver.versionType}
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="py-3 pr-4">
                                 <div className="flex flex-wrap gap-1">
-                                  {displayMcVers.slice(0, 3).map((v) => (
+                                  {ver.mcVersions.slice(0, 3).map((v) => (
                                     <span key={v} className="px-1.5 py-0.5 rounded-lg text-xs border font-mono bg-indigo-500/10 text-indigo-300 border-indigo-500/20">
                                       {v}
                                     </span>
@@ -586,34 +780,34 @@ export default function ModpackDetailPage() {
                                 </div>
                               </td>
                               <td className="py-3 pr-4">
-                                {loaderNum !== null && LOADER_NAMES[loaderNum] ? (
-                                  <span className={`px-1.5 py-0.5 rounded-full text-xs border ${LOADER_COLORS[loaderNum] ?? 'bg-gray-500/15 text-gray-300 border-gray-500/25'}`}>
-                                    {LOADER_NAMES[loaderNum]}
-                                  </span>
+                                {ver.loaders.length > 0 ? (
+                                  <div className="flex flex-wrap gap-1">
+                                    {ver.loaders.map(loaderBadge)}
+                                  </div>
                                 ) : (
                                   <span className="text-xs text-gray-600">—</span>
                                 )}
                               </td>
                               <td className="py-3 pr-4 whitespace-nowrap text-xs text-gray-500">
-                                {formatFileSize((file as any).fileLength)}
+                                {formatFileSize(ver.fileSize)}
                               </td>
                               <td className="py-3 pr-4 whitespace-nowrap text-xs text-gray-500">
-                                {formatDate(file.fileDate)}
+                                {formatDate(ver.datePublished)}
                               </td>
                               <td className="py-3 text-right">
-                                {installedFileIds.has(file.id) ? (
+                                {isInstalled ? (
                                   <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-green-500/10 border border-green-500/25 text-green-400">
                                     <Check size={11} />
                                     Instalado
                                   </span>
                                 ) : (
                                   <button
-                                    onClick={() => openInstallModal(file.id)}
-                                    disabled={isAnyInstalling || isFileInstalling(file.id)}
-                                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-sm"
+                                    onClick={() => openInstallModal(ver.id)}
+                                    disabled={isAnyInstalling}
+                                    className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-gradient-to-r ${theme.versionBtn} text-white transition-all hover:scale-[1.02] active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 shadow-sm`}
                                   >
-                                    {isFileInstalling(file.id) ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
-                                    {isFileInstalling(file.id) ? 'Instalando...' : 'Instalar'}
+                                    {isThisInstalling ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                                    {isThisInstalling ? 'Instalando...' : 'Instalar'}
                                   </button>
                                 )}
                               </td>
@@ -630,25 +824,29 @@ export default function ModpackDetailPage() {
             )
           )}
 
-          {/* Changelog */}
-          {tab === 'changelog' && (
+          {/* Changelog (CF only) */}
+          {tab === 'changelog' && source === 'cf' && (
             <div>
-              {/* Version selector */}
-              {files.length > 0 && (
+              {cfFiles.length > 0 && (
                 <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-700/50 flex-wrap">
                   <span className="text-xs text-gray-500 shrink-0">Versión:</span>
                   <button
-                    onClick={() => { if (changelogViewFileId !== files[0].id) { setChangelogViewFileId(files[0].id); setChangelogFileId(null); setChangelog(null) } }}
+                    onClick={() => {
+                      if (changelogViewFileId !== cfFiles[0].id) {
+                        setChangelogViewFileId(cfFiles[0].id)
+                        setChangelogFileId(null)
+                        setChangelog(null)
+                      }
+                    }}
                     className={`text-xs px-2.5 py-1 rounded-lg border font-medium transition-all ${
-                      changelogViewFileId === files[0].id
-                        ? 'bg-purple-500/20 border-purple-500/40 text-purple-300'
+                      changelogViewFileId === cfFiles[0].id
+                        ? theme.changelogActive
                         : 'bg-gray-800/60 border-gray-700/60 text-gray-400 hover:border-gray-600 hover:text-gray-300'
                     }`}
                   >
                     Última versión
                   </button>
-                  {files.length > 1 && (
-                    //Select Filter by version
+                  {cfFiles.length > 1 && (
                     <FilterSelect
                       icon={Layers}
                       value={String(changelogViewFileId ?? '')}
@@ -656,21 +854,20 @@ export default function ModpackDetailPage() {
                       placeholder="Selecciona una versión"
                       options={[
                         { value: '', label: 'Selecciona una versión' },
-                        ...files.map((f) => ({ value: String(f.id), label: f.displayName || f.fileName })),
+                        ...cfFiles.map((f) => ({ value: String(f.id), label: f.displayName || f.fileName })),
                       ]}
                     />
                   )}
                 </div>
               )}
-
               {changelogLoading ? (
                 <div className="flex items-center justify-center py-12">
-                  <Loader2 size={20} className="text-purple-400 animate-spin" />
+                  <Loader2 size={20} className={`${theme.spinner} animate-spin`} />
                 </div>
               ) : changelog ? (
                 <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40">
                   <div
-                    className="prose prose-invert prose-sm max-w-none text-gray-300 [&_img]:max-w-full [&_a]:text-purple-400 [&_a]:no-underline [&_a:hover]:underline"
+                    className={`prose prose-invert prose-sm max-w-none text-gray-300 [&_img]:max-w-full ${theme.descLink} [&_a]:no-underline`}
                     dangerouslySetInnerHTML={{ __html: sanitizeHtml(changelog) }}
                   />
                 </div>
@@ -690,8 +887,8 @@ export default function ModpackDetailPage() {
         title="Nombre de la instancia"
         maxWidth="max-w-sm"
         icon={Download}
-        iconBg="bg-purple-500/15"
-        iconColor="text-purple-400"
+        iconBg={theme.modalIcon}
+        iconColor={theme.modalIconCl}
       >
         <p className="text-sm text-gray-400 mb-3">
           Elige un nombre para esta instancia. Puedes editarlo para distinguir versiones.
@@ -703,7 +900,7 @@ export default function ModpackDetailPage() {
           onKeyDown={(e) => e.key === 'Enter' && confirmInstall()}
           placeholder="Nombre de la instancia"
           autoFocus
-          className="w-full px-3 py-2 rounded-xl text-sm border bg-gray-950 border-gray-700 text-gray-200 placeholder-gray-500 focus:outline-none focus:border-purple-500/60 transition-colors"
+          className={`w-full px-3 py-2 rounded-xl text-sm border bg-gray-950 border-gray-700 text-gray-200 placeholder-gray-500 focus:outline-none ${theme.modalInput} transition-colors`}
         />
         {modalNameError && (
           <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mt-2">
@@ -720,7 +917,7 @@ export default function ModpackDetailPage() {
           <button
             onClick={confirmInstall}
             disabled={!modalName.trim()}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gradient-to-r ${theme.modalBtn} text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed`}
           >
             <Download size={14} />
             Instalar
@@ -736,7 +933,7 @@ export default function ModpackDetailPage() {
         >
           <img
             src={lightbox}
-            alt="Screenshot"
+            alt="Imagen del modpack"
             className="max-w-[90vw] max-h-[90vh] rounded-2xl shadow-2xl object-contain"
             onClick={(e) => e.stopPropagation()}
           />

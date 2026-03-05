@@ -5,12 +5,13 @@ export interface InstallingItem {
   id: string
   name: string
   fileId?: number
+  source?: 'cf' | 'mr'
 }
 
 interface InstallContextValue {
   installing: InstallingItem[]
   progress: InstallProgress | null
-  startInstall: (id: string, name: string, fileId?: number) => void
+  startInstall: (id: string, name: string, fileId?: number, source?: 'cf' | 'mr') => void
   finishInstall: (id: string) => void
 }
 
@@ -28,11 +29,15 @@ export function InstallProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const handleProgress = (p: InstallProgress) => setProgress(p)
     window.launcher.on('cf:installProgress', handleProgress)
-    return () => window.launcher.off('cf:installProgress', handleProgress)
+    window.launcher.on('mr:installModpack:progress', handleProgress)
+    return () => {
+      window.launcher.off('cf:installProgress', handleProgress)
+      window.launcher.off('mr:installModpack:progress', handleProgress)
+    }
   }, [])
 
-  const startInstall = useCallback((id: string, name: string, fileId?: number) => {
-    setInstalling((prev) => [...prev, { id, name, fileId }])
+  const startInstall = useCallback((id: string, name: string, fileId?: number, source: 'cf' | 'mr' = 'cf') => {
+    setInstalling((prev) => [...prev, { id, name, fileId, source }])
     setProgress(null)
   }, [])
 

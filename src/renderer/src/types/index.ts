@@ -11,7 +11,7 @@ export interface Instance {
   description?: string
   jvmArgs?: string
   lastPlayed?: number
-  source: 'manual' | 'curseforge'
+  source: 'manual' | 'curseforge' | 'modrinth'
   cfMeta?: {
     modpackId: number
     fileId: number
@@ -19,6 +19,12 @@ export interface Instance {
     logoUrl?: string
     fileVersion?: string
     slug?: string
+  }
+  mrMeta?: {
+    projectId: string
+    versionId: string
+    name: string
+    logoUrl?: string
   }
 }
 
@@ -43,6 +49,7 @@ export interface AppSettings {
   windowWidth: number
   windowHeight: number
   launchMode: 'cwmc' | 'official'
+  modSource: 'cf' | 'mr'
 }
 
 export interface JavaStatus {

@@ -6,18 +6,19 @@ import Modal from '../components/common/Modal'
 import type { Instance } from '../types'
 import { useInstall } from '../context/InstallContext'
 
-function InstallingCard({ name, percent, stage }: { name: string; percent: number; stage: string }) {
+function InstallingCard({ name, percent, stage, source }: { name: string; percent: number; stage: string; source?: 'cf' | 'mr' }) {
+  const isMr = source === 'mr'
   return (
-    <div className="rounded-2xl border border-purple-500/30 overflow-hidden flex flex-col shadow-md bg-gradient-to-br from-gray-800/90 via-purple-950/10 to-gray-900 h-48">
-      <div className="h-36 relative bg-gradient-to-br from-purple-900/50 via-indigo-900/40 to-pink-900/50 flex items-center justify-center">
-        <Loader2 size={28} className="text-purple-400 animate-spin opacity-70" />
+    <div className={`rounded-2xl border overflow-hidden flex flex-col shadow-md h-48 ${isMr ? 'border-green-500/30 bg-gradient-to-br from-gray-800/90 via-green-950/10 to-gray-900' : 'border-purple-500/30 bg-gradient-to-br from-gray-800/90 via-purple-950/10 to-gray-900'}`}>
+      <div className={`h-36 relative flex items-center justify-center ${isMr ? 'bg-gradient-to-br from-green-900/50 via-emerald-900/40 to-teal-900/50' : 'bg-gradient-to-br from-purple-900/50 via-indigo-900/40 to-pink-900/50'}`}>
+        <Loader2 size={28} className={`animate-spin opacity-70 ${isMr ? 'text-green-400' : 'text-purple-400'}`} />
       </div>
       <div className="p-2.5 flex-1 flex flex-col justify-end gap-1.5">
         <p className="text-sm font-semibold text-gray-200 truncate">{name}</p>
         <p className="text-xs text-gray-500 truncate">{stage || 'Preparando...'}</p>
         <div className="h-1.5 bg-gray-700 rounded-full overflow-hidden">
           <div
-            className="h-full bg-gradient-to-r from-purple-500 to-pink-500 rounded-full transition-all duration-300"
+            className={`h-full rounded-full transition-all duration-300 ${isMr ? 'bg-gradient-to-r from-green-500 to-emerald-500' : 'bg-gradient-to-r from-purple-500 to-pink-500'}`}
             style={{ width: `${Math.min(100, Math.max(0, percent))}%` }}
           />
         </div>
@@ -310,7 +311,7 @@ export default function InstancesPage() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {installing.map((item) => (
-              <InstallingCard key={item.id} name={item.name} percent={progress?.percent ?? 0} stage={progress?.stage ?? ''} />
+              <InstallingCard key={item.id} name={item.name} percent={progress?.percent ?? 0} stage={progress?.stage ?? ''} source={item.source} />
             ))}
             {visibleInstances.map((inst) => (
               deletingId === inst.id ? (

@@ -67,7 +67,8 @@ export default function App() {
               <Route path="/instances/new" element={<NewInstancePage key={location.key} />} />
               <Route path="/instances/:id" element={<InstanceDetailPage />} />
               <Route path="/catalog" element={<CatalogPage />} />
-              <Route path="/catalog/:modpackId" element={<ModpackDetailPage />} />
+              <Route path="/catalog/:modpackId" element={<ModpackDetailPage source="cf" />} />
+              <Route path="/catalog/mr/:projectId" element={<ModpackDetailPage source="mr" />} />
               <Route path="/settings" element={<SettingsPage onAccountChange={setActiveAccount} />} />
             </Routes>
           </main>

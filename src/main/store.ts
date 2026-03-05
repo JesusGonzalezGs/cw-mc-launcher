@@ -22,6 +22,7 @@ export interface AppSettings {
   windowWidth: number
   windowHeight: number
   launchMode: 'cwmc' | 'official'
+  modSource: 'cf' | 'mr'
 }
 
 function getDefaultDirs() {
@@ -69,6 +70,7 @@ export function getSettings(): AppSettings {
     windowWidth: stored.windowWidth ?? 1200,
     windowHeight: stored.windowHeight ?? 760,
     launchMode: stored.launchMode ?? 'cwmc',
+    modSource: stored.modSource ?? 'cf',
   }
 }
 

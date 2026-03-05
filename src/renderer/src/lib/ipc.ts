@@ -84,6 +84,16 @@ declare global {
         get: () => Promise<any>
         save: (partial: any) => Promise<any>
       }
+      mr: {
+        search: (params: any) => Promise<any>
+        getProject: (id: string) => Promise<any>
+        getProjectVersions: (id: string, gameVersions?: string[], loaders?: string[]) => Promise<any[]>
+        getVersion: (id: string) => Promise<any>
+        installVersion: (instanceId: string, versionId: string, folder: string, mrSlug?: string) => Promise<{ ok: boolean; filename: string }>
+        installModpack: (projectId: string, versionId: string, name: string, logoUrl?: string) => Promise<any>
+        cancelInstall: () => Promise<{ ok: boolean }>
+        onInstallProgress: (cb: (p: any) => void) => () => void
+      }
       on: (channel: string, callback: (...args: any[]) => void) => void
       off: (channel: string, callback: (...args: any[]) => void) => void
       openExternal: (url: string) => Promise<void>

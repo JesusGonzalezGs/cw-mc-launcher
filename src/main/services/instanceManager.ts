@@ -21,8 +21,8 @@ export interface Instance {
   jvmArgs?: string
   /** ms timestamp de última ejecución */
   lastPlayed?: number
-  /** origen: 'manual' | 'curseforge' */
-  source: 'manual' | 'curseforge'
+  /** origen: 'manual' | 'curseforge' | 'modrinth' */
+  source: 'manual' | 'curseforge' | 'modrinth'
   /** Metadatos de CurseForge si el origen es 'curseforge' */
   cfMeta?: {
     modpackId: number
@@ -31,6 +31,13 @@ export interface Instance {
     logoUrl?: string
     fileVersion?: string
     slug?: string
+  }
+  /** Metadatos de Modrinth si el origen es 'modrinth' */
+  mrMeta?: {
+    projectId: string
+    versionId: string
+    name: string
+    logoUrl?: string
   }
 }
 

@@ -12,6 +12,7 @@ export interface ModMeta {
   fileId: number
   name: string
   slug: string
+  mrSlug?: string
   logo?: string
   summary?: string
   gameVersions: string[]

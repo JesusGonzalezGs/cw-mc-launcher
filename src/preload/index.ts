@@ -9,6 +9,7 @@ const ALLOWED_EVENTS = [
   'loaders:progress',
   'cf:installProgress',
   'mod:installProgress',
+  'mr:installModpack:progress',
 ] as const
 
 contextBridge.exposeInMainWorld('launcher', {
@@ -102,6 +103,29 @@ contextBridge.exposeInMainWorld('launcher', {
     installModpack: (modpackId: number, fileId: number, name: string, logoUrl?: string, fileVersion?: string, slug?: string) =>
       ipcRenderer.invoke('cf:installModpack', modpackId, fileId, name, logoUrl, fileVersion, slug),
     cancelInstall: () => ipcRenderer.invoke('cf:cancelInstall'),
+  },
+
+  // ── Modrinth ─────────────────────────────────────────────────────────────────
+  mr: {
+    search: (params: any) => ipcRenderer.invoke('mr:search', params),
+    getProject: (id: string) => ipcRenderer.invoke('mr:getProject', id),
+    getProjectVersions: (id: string, gameVersions?: string[], loaders?: string[]) =>
+      ipcRenderer.invoke('mr:getProjectVersions', id, gameVersions, loaders),
+    getVersion: (id: string) => ipcRenderer.invoke('mr:getVersion', id),
+    installVersion: (instanceId: string, versionId: string, folder: string, mrSlug?: string) =>
+      ipcRenderer.invoke('mr:installVersion', instanceId, versionId, folder, mrSlug),
+    installModpack: (projectId: string, versionId: string, name: string, logoUrl?: string) =>
+      ipcRenderer.invoke('mr:installModpack', projectId, versionId, name, logoUrl),
+    cancelInstall: () => ipcRenderer.invoke('mr:cancelInstall'),
+    onInstallProgress: (cb: (p: any) => void) => {
+      const wrapped = (_e: Electron.IpcRendererEvent, p: any) => cb(p)
+      ;(cb as any).__mrWrapped = wrapped
+      ipcRenderer.on('mr:installModpack:progress', wrapped)
+      return () => {
+        ipcRenderer.removeListener('mr:installModpack:progress', wrapped)
+        delete (cb as any).__mrWrapped
+      }
+    },
   },
 
   // ── Settings ─────────────────────────────────────────────────────────────────

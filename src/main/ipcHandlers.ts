@@ -60,6 +60,7 @@ import { installCurseForgeModpack, cancelInstall } from './services/modpackInsta
 import { installModWithDeps, readModsJson, removeModMeta, identifyMods } from './services/modManager'
 import { installFileWithMeta, identifyFiles, readFilesJson, removeFileMeta } from './services/fileManager'
 import { launchInstance, isInstanceRunning, stopInstance } from './services/gameLauncher'
+import { mrSearch, mrGetProject, mrGetProjectVersions, mrGetVersion, mrInstallVersion, mrInstallModpack, cancelMrInstall } from './services/modrinthService'
 import { downloadFile } from './utils/downloadHelper'
 import path from 'path'
 import fs from 'fs'
@@ -443,4 +444,32 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('app:openExternal', (_, url: string) => shell.openExternal(url))
+
+  // ── Modrinth ──────────────────────────────────────────────────────────────────
+  ipcMain.handle('mr:search', (_, params: any) => mrSearch(params))
+
+  ipcMain.handle('mr:getProject', (_, id: string) => mrGetProject(id))
+
+  ipcMain.handle('mr:getProjectVersions', (_, id: string, gameVersions?: string[], loaders?: string[]) =>
+    mrGetProjectVersions(id, gameVersions, loaders)
+  )
+
+  ipcMain.handle('mr:getVersion', (_, id: string) => mrGetVersion(id))
+
+  ipcMain.handle('mr:installVersion', (_, instanceId: string, versionId: string, folder: string, mrSlug?: string) =>
+    mrInstallVersion(instanceId, versionId, folder, mrSlug)
+  )
+
+  ipcMain.handle('mr:installModpack', async (_, projectId: string, versionId: string, name: string, logoUrl?: string) => {
+    const win = getMainWindow()
+    const instance = await mrInstallModpack(projectId, versionId, name, logoUrl, (p) => {
+      win?.webContents.send('mr:installModpack:progress', p)
+    })
+    return instance
+  })
+
+  ipcMain.handle('mr:cancelInstall', () => {
+    cancelMrInstall()
+    return { ok: true }
+  })
 }
