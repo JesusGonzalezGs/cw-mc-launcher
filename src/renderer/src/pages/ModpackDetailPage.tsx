@@ -7,6 +7,7 @@ import ImageViewer from '../components/ImageViewer'
 import FilterSelect from '../components/common/FilterSelect'
 import type { CfMod, CfFile } from '../types'
 import { useInstall } from '../context/InstallContext'
+import { mrGetProject, mrGetProjectVersions } from '../api/mrApi'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -316,8 +317,8 @@ export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
           return buildCfData(modResp?.data ?? null, desc ?? '', files)
         })
       : Promise.all([
-          window.launcher.mr.getProject(id),
-          window.launcher.mr.getProjectVersions(id),
+          mrGetProject(id),
+          mrGetProjectVersions(id),
         ]).then(([proj, vers]) => {
           if ((vers ?? []).length > 0) setMrChangelogVersionId(vers[0].id)
           return buildMrData(proj, vers ?? [])

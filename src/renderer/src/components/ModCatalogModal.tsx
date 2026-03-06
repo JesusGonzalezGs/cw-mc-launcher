@@ -3,6 +3,7 @@ import {
   X, Search, Package, Download, RefreshCw,
   ChevronLeft, ChevronRight, Tag, Layers, ArrowUpDown, Flame, Leaf,
 } from 'lucide-react'
+import { mrSearch, mrGetProject, mrGetProjectVersions } from '../api/mrApi'
 import ImageViewer from './ImageViewer'
 import FilterSelect from './common/FilterSelect'
 import type { Instance } from '../types'
@@ -337,13 +338,13 @@ function ModDetailView({ mod, source, installing, installed, installError, onIns
     setLoadingDesc(true)
     const descP: Promise<string> = isCf
       ? (window.launcher.cf.getModDescription(mod.id) as Promise<string>)
-      : window.launcher.mr.getProject(mod.project_id).then((p: any) => { setMrGallery(p.gallery ?? []); return p.body ?? '' })
+      : mrGetProject(mod.project_id).then((p: any) => { setMrGallery(p.gallery ?? []); return p.body ?? '' })
     descP.then(setDescription).catch(() => {}).finally(() => setLoadingDesc(false))
 
     setLoadingVersions(true)
     const versP: Promise<NormVersion[]> = isCf
       ? (window.launcher.cf.getModFiles(mod.id) as Promise<any>).then(r => (r?.data ?? []).map(cfFileToNormVersion))
-      : window.launcher.mr.getProjectVersions(mod.project_id).then((vs: any[]) => vs.map(mrVerToNormVersion))
+      : mrGetProjectVersions(mod.project_id).then((vs: any[]) => vs.map(mrVerToNormVersion))
     versP.then(nv => {
       setNormVersions(nv)
       const hasVersion = nv.some(v => v.gameVersions.includes(version))
@@ -583,15 +584,15 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
           index: page * PAGE_SIZE,
           pageSize: PAGE_SIZE,
         }) as Promise<any>).then(r => ({ data: r.data ?? [], total: r.pagination?.totalCount ?? 0 }))
-      : (window.launcher.mr.search({
-          query: debouncedSearch,
-          version,
-          loader: loader || undefined,
+      : mrSearch({
+          query: debouncedSearch || undefined,
+          gameVersions: version ? [version] : undefined,
+          loaders: loader ? [loader] : undefined,
           sortBy: mrSortField,
           projectType: 'mod',
           offset: page * PAGE_SIZE,
           limit: PAGE_SIZE,
-        }) as Promise<any>).then(r => ({ data: r.hits ?? [], total: r.total_hits ?? 0 }))
+        }).then(r => ({ data: r.hits ?? [], total: r.total_hits ?? 0 }))
 
     fetch.then(({ data, total }) => {
       if (!cancelled) { setMods(data); setTotalCount(total) }
@@ -649,7 +650,7 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
     setInstalling({ id: mod.project_id })
     setInstallErrors(prev => { const n = { ...prev }; delete n[mod.project_id]; return n })
     try {
-      const vers = await window.launcher.mr.getProjectVersions(mod.project_id) as any[]
+      const vers = await mrGetProjectVersions(mod.project_id) as any[]
       const best = pickBestNormVersion(vers.map(mrVerToNormVersion), version, loader, 'mr')
       if (!best) throw new Error('No hay versión compatible')
       await window.launcher.mr.installVersion(instance.id, best.id, 'mods', mod.slug)
@@ -661,6 +662,7 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
       setInstalling(null)
     }
   }
+
 
   const totalPages = Math.ceil(Math.min(totalCount, 10000) / PAGE_SIZE)
 

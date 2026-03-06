@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { LOADER_TYPE_MAP } from '../constants'
 import FilterSelect from '../components/common/FilterSelect'
+import { mrSearch } from '../api/mrApi'
 import type { CfMod } from '../types'
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -96,8 +97,9 @@ export default function CatalogPage() {
   const [mrTotalCount, setMrTotalCount] = useState(0)
   const [mrPage, setMrPage]             = useState(0)
 
-  const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
+  const [loading, setLoading]   = useState(true)
+  const [error, setError]       = useState('')
+  const retryRef = useRef<() => void>(() => {})
 
   const debounceRef  = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cfFetchIdRef = useRef(0)
@@ -149,6 +151,7 @@ export default function CatalogPage() {
 
   // Reset loader filter when source changes (CF uses uppercase, MR lowercase)
   useEffect(() => {
+    setLoading(true)
     setLoaderFilter('')
     setInputQuery('')
     setQuery('')
@@ -179,6 +182,7 @@ export default function CatalogPage() {
       setCfPage(targetPage)
     } catch (e: any) {
       if (id !== cfFetchIdRef.current) return
+      retryRef.current = () => fetchCf(targetPage)
       setError(e.message ?? 'Error al buscar modpacks')
     } finally {
       if (id === cfFetchIdRef.current) setLoading(false)
@@ -191,7 +195,7 @@ export default function CatalogPage() {
     setLoading(true)
     setError('')
     try {
-      const resp = await window.launcher.mr.search({
+      const resp = await mrSearch({
         query: query || undefined,
         projectType: 'modpack',
         gameVersions: mcFilter ? [mcFilter] : undefined,
@@ -206,6 +210,7 @@ export default function CatalogPage() {
       setMrPage(targetPage)
     } catch (e: any) {
       if (id !== mrFetchIdRef.current) return
+      retryRef.current = () => fetchMr(targetPage)
       setError(e.message ?? 'Error al buscar modpacks')
     } finally {
       if (id === mrFetchIdRef.current) setLoading(false)
@@ -348,8 +353,20 @@ export default function CatalogPage() {
 
         {/* Error */}
         {error && (
-          <div className="p-3 mb-5 bg-red-500/10 border border-red-500/20 rounded-xl">
-            <p className="text-red-400 text-sm">{error}</p>
+          <div className="flex flex-col items-center justify-center py-24 gap-4">
+            <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-red-500/10 border border-red-500/20">
+              <PackageSearch size={28} className="text-red-500/60" />
+            </div>
+            <div className="text-center">
+              <p className="font-semibold text-sm text-red-400 mb-1">Error al consultar el repositorio de Modrinth</p>
+              <p className="text-xs text-gray-600">{error}</p>
+            </div>
+            <button
+              onClick={() => retryRef.current()}
+              className="text-xs px-4 py-2 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors"
+            >
+              Volver a intentar
+            </button>
           </div>
         )}
 

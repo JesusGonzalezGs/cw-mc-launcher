@@ -16,25 +16,27 @@ import type { ModLoader } from './modLoaderInstaller'
 import type { InstallProgress } from './modpackInstaller'
 
 const MR_BASE = 'https://api.modrinth.com/v2'
-const MR_HEADERS = { 'User-Agent': 'cw-mc-launcher/0.1.0' }
+const MR_HEADERS = {
+  'User-Agent': 'cw-mc-launcher/0.1.0 (contact@cubewatcher.com)',
+  'Accept': 'application/json',
+}
 
 async function mrFetch(endpoint: string, retries = 2): Promise<any> {
   const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), 15_000)
+  const timer = setTimeout(() => controller.abort(), 15_000)
   try {
     const res = await fetch(`${MR_BASE}${endpoint}`, { headers: MR_HEADERS, signal: controller.signal })
     if (res.status === 429 && retries > 0) {
-      const wait = Number(res.headers.get('X-Ratelimit-Reset') ?? 2) * 1000
-      await new Promise(r => setTimeout(r, Math.min(wait, 5_000)))
+      await new Promise(r => setTimeout(r, 3_000))
       return mrFetch(endpoint, retries - 1)
     }
-    if (!res.ok) throw new Error(`Modrinth ${res.status}: ${await res.text()}`)
+    if (!res.ok) throw new Error(`Modrinth ${res.status}: ${(await res.text()).slice(0, 200)}`)
     return res.json()
-  } catch (e: any) {
-    if (e.name === 'AbortError') throw new Error('La búsqueda en Modrinth tardó demasiado. Inténtalo de nuevo.')
-    throw e
+  } catch (err: any) {
+    if (err?.name === 'AbortError') throw new Error('La búsqueda en Modrinth tardó demasiado. Inténtalo de nuevo.')
+    throw err
   } finally {
-    clearTimeout(timeout)
+    clearTimeout(timer)
   }
 }
 

@@ -3,6 +3,7 @@ import {
   X, Search, Download, RefreshCw, ChevronLeft, ChevronRight,
   Tag, ArrowUpDown, Image, Sparkles, Database,
 } from 'lucide-react'
+import { mrSearch, mrGetProject, mrGetProjectVersions } from '../api/mrApi'
 import ImageViewer from './ImageViewer'
 import FilterSelect from './common/FilterSelect'
 import type { Instance } from '../types'
@@ -180,13 +181,13 @@ function FileDetailView({ mod, source, version, installing, installed, installEr
     setLoadingDesc(true)
     const descP: Promise<string> = isCf
       ? (window.launcher.cf.getModDescription(mod.id) as Promise<string>)
-      : window.launcher.mr.getProject(mod.project_id).then((p: any) => p.body ?? '')
+      : mrGetProject(mod.project_id).then((p: any) => p.body ?? '')
     descP.then(setDescription).catch(() => {}).finally(() => setLoadingDesc(false))
 
     setLoadingVersions(true)
     const versP: Promise<NormFileVersion[]> = isCf
       ? (window.launcher.cf.getModFiles(mod.id) as Promise<any>).then(r => (r?.data ?? []).map(cfFileToNorm))
-      : window.launcher.mr.getProjectVersions(mod.project_id, version ? [version] : undefined).then((vs: any[]) => vs.map(mrVerToNorm))
+      : mrGetProjectVersions(mod.project_id, version ? [version] : undefined).then((vs: any[]) => vs.map(mrVerToNorm))
     versP.then(nv => {
       setNormVersions(nv)
       const hasVersion = nv.some(v => v.gameVersions.includes(version))
@@ -397,6 +398,7 @@ export default function FileCatalogModal({ instance, type, installedFiles: _inst
 
   useEffect(() => {
     if (selectedMod) return
+    let cancelled = false
     setLoading(true)
     const doFetch = source === 'cf'
       ? (window.launcher.cf.searchFiles({
@@ -408,17 +410,28 @@ export default function FileCatalogModal({ instance, type, installedFiles: _inst
           sortOrder: 'desc',
           pageSize: PAGE_SIZE,
           index: page * PAGE_SIZE,
-        }) as Promise<any>).then(r => { setMods(r?.data ?? []); setTotalCount(r?.pagination?.totalCount ?? 0) })
-      : (window.launcher.mr.search({
+        }) as Promise<any>).then(r => {
+          if (!cancelled) {
+            setMods(r?.data ?? [])
+            setTotalCount(r?.pagination?.totalCount ?? 0)
+          }
+        })
+      : mrSearch({
           query: debouncedSearch || undefined,
           projectType: mrProjectType,
           gameVersions: version ? [version] : undefined,
           sortBy: mrSortBy,
           limit: PAGE_SIZE,
           offset: page * PAGE_SIZE,
-        }) as Promise<any>).then(r => { setMods(r?.hits ?? []); setTotalCount(r?.total_hits ?? 0) })
+        }).then(r => {
+          if (!cancelled) {
+            setMods(r?.hits ?? [])
+            setTotalCount(r?.total_hits ?? 0)
+          }
+        })
 
-    doFetch.catch(() => {}).finally(() => setLoading(false))
+    doFetch.catch(() => {}).finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
   }, [debouncedSearch, version, cfSortField, mrSortBy, page, classId, categoryId, selectedMod, source, mrProjectType])
 
   useEffect(() => {
