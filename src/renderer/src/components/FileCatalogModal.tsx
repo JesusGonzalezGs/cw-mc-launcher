@@ -361,6 +361,8 @@ export default function FileCatalogModal({ instance, type, installedFiles: _inst
   const [mods, setMods] = useState<any[]>([])
   const [totalCount, setTotalCount] = useState(0)
   const [loading, setLoading] = useState(false)
+  const [searchError, setSearchError] = useState('')
+  const [retryCount, setRetryCount] = useState(0)
   const [installing, setInstalling] = useState<string | null>(null)
   const [installErrors, setInstallErrors] = useState<Record<string, string>>({})
   const [installedIds, setInstalledIds] = useState(new Set<string>())
@@ -400,6 +402,7 @@ export default function FileCatalogModal({ instance, type, installedFiles: _inst
     if (selectedMod) return
     let cancelled = false
     setLoading(true)
+    setSearchError('')
     const doFetch = source === 'cf'
       ? (window.launcher.cf.searchFiles({
           ...(classId !== undefined ? { classId } : {}),
@@ -430,9 +433,11 @@ export default function FileCatalogModal({ instance, type, installedFiles: _inst
           }
         })
 
-    doFetch.catch(() => {}).finally(() => { if (!cancelled) setLoading(false) })
+    doFetch.catch((e: any) => {
+      if (!cancelled) setSearchError(e?.message ?? 'Error al buscar')
+    }).finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [debouncedSearch, version, cfSortField, mrSortBy, page, classId, categoryId, selectedMod, source, mrProjectType])
+  }, [debouncedSearch, version, cfSortField, mrSortBy, page, classId, categoryId, selectedMod, source, mrProjectType, retryCount])
 
   useEffect(() => {
     if (!selectedMod) inputRef.current?.focus()
@@ -554,6 +559,15 @@ export default function FileCatalogModal({ instance, type, installedFiles: _inst
                 {loading ? (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {[...Array(9)].map((_, i) => <div key={i} className="h-36 rounded-2xl animate-pulse bg-gray-700/50" />)}
+                  </div>
+                ) : searchError ? (
+                  <div className="flex flex-col items-center justify-center gap-3 py-16 text-gray-600">
+                    <Icon size={40} className="opacity-25 text-red-500" />
+                    <p className="text-sm text-red-400">Error al consultar el repositorio</p>
+                    <p className="text-xs text-gray-600 text-center max-w-xs">{searchError}</p>
+                    <button onClick={() => setRetryCount(c => c + 1)} className="text-xs px-4 py-2 rounded-xl border border-red-500/30 text-red-400 hover:bg-red-500/10 transition-colors">
+                      Volver a intentar
+                    </button>
                   </div>
                 ) : mods.length === 0 ? (
                   <div className="flex flex-col items-center justify-center gap-3 py-16 text-gray-600">
