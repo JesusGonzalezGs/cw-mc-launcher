@@ -17,7 +17,7 @@ import type { InstallProgress } from './modpackInstaller'
 
 const MR_BASE = 'https://api.modrinth.com/v2'
 const MR_HEADERS = {
-  'User-Agent': 'cw-mc-launcher/0.1.0 (contact@cubewatcher.com)',
+  'User-Agent': 'cw-mc-launcher/0.1.0 (github.com/cw-mc-launcher)',
   'Accept': 'application/json',
 }
 

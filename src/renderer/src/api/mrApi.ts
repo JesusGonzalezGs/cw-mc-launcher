@@ -8,6 +8,8 @@
 const BASE = 'https://api.modrinth.com/v2'
 const HEADERS = {
   'User-Agent': 'cw-mc-launcher/0.1.0 (github.com/cw-mc-launcher)',
+  'Accept': 'application/json',
+
 }
 
 async function get(endpoint: string, retries = 2): Promise<any> {
