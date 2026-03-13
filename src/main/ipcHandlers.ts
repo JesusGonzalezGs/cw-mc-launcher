@@ -10,6 +10,8 @@ import {
   getMcJavaVersion,
 } from './services/javaManager'
 import {
+  loginWithGoogle,
+  logoutFromLauncher,
   loginWithMicrosoft,
   loginOffline,
   refreshAccountIfNeeded,
@@ -19,6 +21,7 @@ import {
   deleteAccount,
   getSettings,
   saveSettings,
+  getLauncherUser,
 } from './store'
 import {
   listInstances,
@@ -126,6 +129,20 @@ export function registerIpcHandlers(): void {
       progress: downloads[version]?.progress ?? 0,
       error: downloads[version]?.error ?? '',
     }
+  })
+
+  // ── Launcher user (Google) ────────────────────────────────────────────────────
+  ipcMain.handle('launcher:loginGoogle', async () => {
+    return loginWithGoogle()
+  })
+
+  ipcMain.handle('launcher:logoutGoogle', () => {
+    logoutFromLauncher()
+    return { ok: true }
+  })
+
+  ipcMain.handle('launcher:getUser', () => {
+    return getLauncherUser()
   })
 
   // ── Auth ─────────────────────────────────────────────────────────────────────

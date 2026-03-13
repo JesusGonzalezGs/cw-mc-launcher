@@ -28,6 +28,13 @@ contextBridge.exposeInMainWorld('launcher', {
     getForMcVersion: (mcVersion: string) => ipcRenderer.invoke('java:getForMcVersion', mcVersion),
   },
 
+  // ── Launcher user (Google) ───────────────────────────────────────────────────
+  launcherUser: {
+    login: () => ipcRenderer.invoke('launcher:loginGoogle'),
+    logout: () => ipcRenderer.invoke('launcher:logoutGoogle'),
+    getUser: () => ipcRenderer.invoke('launcher:getUser'),
+  },
+
   // ── Auth ────────────────────────────────────────────────────────────────────
   auth: {
     loginMsa: () => ipcRenderer.invoke('auth:loginMsa'),

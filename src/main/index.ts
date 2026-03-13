@@ -1,3 +1,4 @@
+import 'dotenv/config'
 import { app, BrowserWindow, shell } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'

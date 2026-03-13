@@ -1,12 +1,112 @@
 /**
- * Autenticación de cuentas Minecraft.
- * Soporta Microsoft (MSA) con la cadena completa OAuth2 → XBL → XSTS → MC,
- * y modo offline con UUID determinístico.
+ * Autenticación del launcher (Google) y de cuentas Minecraft (MSA + offline).
+ * Google OAuth usa el flujo de "aplicación de escritorio" con BrowserWindow.
+ * MSA usa la cadena completa OAuth2 → XBL → XSTS → MC.
  */
 import { BrowserWindow } from 'electron'
-import { v5 as uuidV5, v4 as uuidV4 } from 'uuid'
-import { saveAccount, getAccounts, getSettings, saveSettings } from '../store'
-import type { Account } from '../store'
+import { v5 as uuidV5 } from 'uuid'
+import {
+  saveAccount, getAccounts, getSettings, saveSettings,
+  saveLauncherUser, deleteLauncherUser,
+} from '../store'
+import type { Account, LauncherUser } from '../store'
+
+// ── Google OAuth ──────────────────────────────────────────────────────────────
+// IMPORTANTE: Crea credenciales OAuth 2.0 de tipo "Aplicación de escritorio"
+// en https://console.cloud.google.com/ y pega aquí tu Client ID y Secret.
+// Para Desktop Apps Google permite cualquier puerto en 127.0.0.1 sin configuración.
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID ?? ''
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET ?? ''
+const GOOGLE_REDIRECT_URI = 'http://127.0.0.1:19231/oauth2callback'
+const GOOGLE_AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth'
+const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token'
+const GOOGLE_USERINFO_URL = 'https://www.googleapis.com/oauth2/v3/userinfo'
+
+async function openGoogleAuthWindow(): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const authWindow = new BrowserWindow({
+      width: 520,
+      height: 680,
+      title: 'Iniciar sesión con Google',
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        partition: 'auth-google',
+      },
+    })
+
+    const url = new URL(GOOGLE_AUTH_URL)
+    url.searchParams.set('client_id', GOOGLE_CLIENT_ID)
+    url.searchParams.set('redirect_uri', GOOGLE_REDIRECT_URI)
+    url.searchParams.set('response_type', 'code')
+    url.searchParams.set('scope', 'openid email profile')
+    url.searchParams.set('access_type', 'offline')
+    url.searchParams.set('prompt', 'select_account')
+
+    authWindow.loadURL(url.toString())
+
+    const handleRedirect = (_: any, redirectUrl: string) => {
+      if (!redirectUrl.startsWith(GOOGLE_REDIRECT_URI)) return
+      const params = new URL(redirectUrl).searchParams
+      const code = params.get('code')
+      const error = params.get('error')
+      authWindow.close()
+      if (code) resolve(code)
+      else reject(new Error(error ?? 'Autenticación cancelada'))
+    }
+
+    authWindow.webContents.on('will-redirect', handleRedirect)
+    authWindow.webContents.on('will-navigate', handleRedirect)
+    authWindow.on('closed', () => reject(new Error('Ventana de autenticación cerrada')))
+  })
+}
+
+async function exchangeGoogleCode(code: string): Promise<any> {
+  const body = new URLSearchParams({
+    code,
+    client_id: GOOGLE_CLIENT_ID,
+    client_secret: GOOGLE_CLIENT_SECRET,
+    redirect_uri: GOOGLE_REDIRECT_URI,
+    grant_type: 'authorization_code',
+  })
+  const resp = await fetch(GOOGLE_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: body.toString(),
+  })
+  if (!resp.ok) throw new Error(`Google token exchange error: ${resp.status}`)
+  return resp.json()
+}
+
+async function fetchGoogleUserInfo(accessToken: string): Promise<any> {
+  const resp = await fetch(GOOGLE_USERINFO_URL, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  })
+  if (!resp.ok) throw new Error(`Google userinfo error: ${resp.status}`)
+  return resp.json()
+}
+
+export async function loginWithGoogle(): Promise<LauncherUser> {
+  const code = await openGoogleAuthWindow()
+  const tokens = await exchangeGoogleCode(code)
+  const userInfo = await fetchGoogleUserInfo(tokens.access_token)
+
+  const launcherUser: LauncherUser = {
+    id: userInfo.sub,
+    email: userInfo.email,
+    name: userInfo.name,
+    picture: userInfo.picture,
+    accessToken: tokens.access_token,
+    refreshToken: tokens.refresh_token ?? '',
+    expiresAt: Date.now() + (tokens.expires_in ?? 3600) * 1000,
+  }
+  saveLauncherUser(launcherUser)
+  return launcherUser
+}
+
+export function logoutFromLauncher(): void {
+  deleteLauncherUser()
+}
 
 // Client ID público usado por launchers de la comunidad (MultiMC, etc.)
 const CLIENT_ID = '00000000402b5328'

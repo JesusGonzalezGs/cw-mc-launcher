@@ -1,6 +1,17 @@
 import Store from 'electron-store'
 import { app } from 'electron'
 import path from 'path'
+import fs from 'fs'
+
+export interface LauncherUser {
+  id: string        // Google sub (user ID)
+  email: string
+  name: string
+  picture?: string
+  accessToken: string
+  refreshToken: string
+  expiresAt: number
+}
 
 export interface Account {
   type: 'msa' | 'offline'
@@ -25,6 +36,16 @@ export interface AppSettings {
   modSource: 'cf' | 'mr'
 }
 
+function isOfficialLauncherInstalled(): boolean {
+  const localAppData = process.env['LOCALAPPDATA'] ?? ''
+  const candidates = [
+    path.join(localAppData, 'Programs', 'Minecraft Launcher', 'MinecraftLauncher.exe'),
+    path.join('C:', 'XboxGames', 'Minecraft Launcher', 'Content', 'Minecraft.exe'),
+    path.join('C:', 'Program Files (x86)', 'Minecraft Launcher', 'MinecraftLauncher.exe'),
+  ]
+  return candidates.some((p) => fs.existsSync(p))
+}
+
 function getDefaultDirs() {
   const userData = app.getPath('userData')
   return {
@@ -37,6 +58,7 @@ function getDefaultDirs() {
 const schema: any = {
   accounts: { type: 'object', default: {} },
   settings: { type: 'object', default: {} },
+  launcherUser: { default: null },
 }
 
 export const store = new Store({ schema })
@@ -69,11 +91,23 @@ export function getSettings(): AppSettings {
     cfApiToken: stored.cfApiToken ?? '',
     windowWidth: stored.windowWidth ?? 1200,
     windowHeight: stored.windowHeight ?? 760,
-    launchMode: stored.launchMode ?? 'cwmc',
+    launchMode: stored.launchMode ?? (isOfficialLauncherInstalled() ? 'official' : 'cwmc'),
     modSource: stored.modSource ?? 'cf',
   }
 }
 
 export function saveSettings(partial: Partial<AppSettings>): void {
   store.set('settings', { ...getSettings(), ...partial })
+}
+
+export function getLauncherUser(): LauncherUser | null {
+  return (store.get('launcherUser') as LauncherUser | null) ?? null
+}
+
+export function saveLauncherUser(user: LauncherUser): void {
+  store.set('launcherUser', user)
+}
+
+export function deleteLauncherUser(): void {
+  store.delete('launcherUser')
 }

@@ -1,5 +1,15 @@
 export type ModLoader = 'vanilla' | 'fabric' | 'quilt' | 'forge' | 'neoforge'
 
+export interface LauncherUser {
+  id: string
+  email: string
+  name: string
+  picture?: string
+  accessToken: string
+  refreshToken: string
+  expiresAt: number
+}
+
 export interface Instance {
   id: string
   name: string

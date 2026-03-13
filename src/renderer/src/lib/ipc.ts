@@ -6,6 +6,11 @@
 declare global {
   interface Window {
     launcher: {
+      launcherUser: {
+        login: () => Promise<any>
+        logout: () => Promise<any>
+        getUser: () => Promise<any>
+      }
       window: {
         minimize: () => void
         maximize: () => void
