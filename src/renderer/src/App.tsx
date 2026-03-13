@@ -12,6 +12,7 @@ import ModpackDetailPage from './pages/ModpackDetailPage'
 import SettingsPage from './pages/SettingsPage'
 import { InstallProvider } from './context/InstallContext'
 import GlobalInstallBar from './components/GlobalInstallBar'
+import UpdateNotification from './components/UpdateNotification'
 import type { LauncherUser } from './types'
 
 export default function App() {
@@ -98,6 +99,7 @@ export default function App() {
         </div>
         <GlobalInstallBar />
       </div>
+      <UpdateNotification />
     </InstallProvider>
   )
 }

@@ -1,15 +1,19 @@
 import dotenv from 'dotenv'
-import { app, BrowserWindow, shell } from 'electron'
-import path from 'path'
+import { app, BrowserWindow, shell, ipcMain } from 'electron'
+import path, { join } from 'path'
+import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { autoUpdater } from 'electron-updater'
+import { registerIpcHandlers } from './ipcHandlers'
 
 // En producción el .env está junto a los recursos de la app
 dotenv.config(app.isPackaged
   ? { path: path.join(process.resourcesPath, '.env') }
   : {}
 )
-import { join } from 'path'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { registerIpcHandlers } from './ipcHandlers'
+
+// Descarga automáticamente en segundo plano, instala al cerrar o al pedir
+autoUpdater.autoDownload = true
+autoUpdater.autoInstallOnAppQuit = true
 
 let mainWindow: BrowserWindow | null = null
 
@@ -33,6 +37,9 @@ function createWindow(): void {
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show()
+    if (app.isPackaged) {
+      autoUpdater.checkForUpdates().catch(() => {})
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -64,6 +71,26 @@ app.whenReady().then(() => {
   })
   registerIpcHandlers()
   createWindow()
+
+  // ── Auto-updater ────────────────────────────────────────────────────────
+  if (app.isPackaged) {
+    autoUpdater.on('update-available', (info) => {
+      mainWindow?.webContents.send('update:available', { version: info.version })
+    })
+    autoUpdater.on('download-progress', (p) => {
+      mainWindow?.webContents.send('update:progress', { percent: Math.floor(p.percent) })
+    })
+    autoUpdater.on('update-downloaded', (info) => {
+      mainWindow?.webContents.send('update:ready', { version: info.version })
+    })
+
+    ipcMain.handle('update:install', () => autoUpdater.quitAndInstall())
+    ipcMain.handle('update:check', async () => {
+      const result = await autoUpdater.checkForUpdates().catch(() => null)
+      return result ? { hasUpdate: true, version: result.updateInfo.version } : { hasUpdate: false }
+    })
+
+  }
 })
 
 app.on('window-all-closed', () => {

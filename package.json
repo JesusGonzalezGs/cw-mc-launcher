@@ -22,12 +22,25 @@
       "resources/**/*"
     ],
     "extraResources": [
-      { "from": ".env", "to": ".env" }
+      {
+        "from": ".env",
+        "to": ".env"
+      }
     ],
     "win": {
       "target": [
-        { "target": "nsis",     "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ],
       "icon": "resources/icon.ico"
     },
@@ -41,11 +54,17 @@
     },
     "portable": {
       "artifactName": "CW-MC-Launcher-${version}-portable.exe"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "JesusGonzalezGs",
+      "repo": "cw-mc-launcher"
     }
   },
   "dependencies": {
     "dotenv": "^17.3.1",
     "electron-store": "^8.1.0",
+    "electron-updater": "^6.8.3",
     "unzipper": "^0.12.3",
     "uuid": "^11.0.0"
   },

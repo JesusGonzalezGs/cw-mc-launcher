@@ -99,6 +99,13 @@ declare global {
         cancelInstall: () => Promise<{ ok: boolean }>
         onInstallProgress: (cb: (p: any) => void) => () => void
       }
+      updater: {
+        install: () => Promise<void>
+        check: () => Promise<{ hasUpdate: boolean; version?: string }>
+      }
+      app: {
+        getVersion: () => Promise<string>
+      }
       on: (channel: string, callback: (...args: any[]) => void) => void
       off: (channel: string, callback: (...args: any[]) => void) => void
       openExternal: (url: string) => Promise<void>

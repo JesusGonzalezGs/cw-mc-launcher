@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
 import {
   LogOut, Check, User, Key, Settings, ExternalLink, Rocket, Monitor,
-  Flame, Leaf, Plus, AlertCircle, ArrowLeft, WifiOff, UserPlus, LogIn,
+  Flame, Leaf, Plus, AlertCircle, ArrowLeft, WifiOff, UserPlus, LogIn, RefreshCw,
 } from 'lucide-react'
 import type { AppSettings, Account, LauncherUser } from '../types'
 import Modal from '../components/common/Modal'
@@ -16,9 +16,13 @@ type AddMode = null | 'choose' | 'offline'
 
 const CARD = 'bg-gradient-to-br from-gray-800/90 via-purple-950/10 to-gray-900 border border-purple-500/25'
 
+type CheckState = 'idle' | 'checking' | 'up-to-date' | 'found'
+
 export default function SettingsPage({ launcherUser, onAccountChange, onLogoutGoogle }: Props) {
   const [settings, setSettings] = useState<AppSettings | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
+  const [checkState, setCheckState] = useState<CheckState>('idle')
+  const [appVersion, setAppVersion] = useState('')
   const [saved, setSaved] = useState(false)
   const [pendingLogout, setPendingLogout] = useState<Account | null>(null)
   const [googleLogoutConfirm, setGoogleLogoutConfirm] = useState(false)
@@ -39,7 +43,10 @@ export default function SettingsPage({ launcherUser, onAccountChange, onLogoutGo
     setAccounts(accs)
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    window.launcher.app.getVersion().then(setAppVersion).catch(() => {})
+  }, [])
 
   async function handleSave() {
     if (!settings) return
@@ -328,6 +335,38 @@ export default function SettingsPage({ launcherUser, onAccountChange, onLogoutGo
                 <p className="text-[11px] text-gray-600 leading-relaxed">{desc}</p>
               </button>
             ))}
+          </div>
+        </section>
+
+        {/* ── Actualizaciones ──────────────────────────────────────────────── */}
+        <section>
+          <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-widest mb-3">Actualizaciones</h2>
+          <div className={`${CARD} rounded-xl px-4 py-3 flex items-center justify-between`}>
+            <div>
+              <p className="text-white text-sm font-medium">Comprobar actualizaciones</p>
+              <p className="text-gray-500 text-xs mt-0.5">
+                {checkState === 'checking'   && 'Buscando actualizaciones...'}
+                {checkState === 'up-to-date' && '✓ Ya tienes la última versión'}
+                {checkState === 'found'      && 'Actualización encontrada, descargando...'}
+                {checkState === 'idle'       && (appVersion ? `Versión ${appVersion}` : 'Versión actual')}
+              </p>
+            </div>
+            <button
+              onClick={async () => {
+                setCheckState('checking')
+                try {
+                  const res = await window.launcher.updater.check()
+                  setCheckState(res.hasUpdate ? 'found' : 'up-to-date')
+                } catch {
+                  setCheckState('idle')
+                }
+              }}
+              disabled={checkState === 'checking'}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            >
+              <RefreshCw size={14} className={checkState === 'checking' ? 'animate-spin' : ''} />
+              {checkState === 'checking' ? 'Comprobando...' : 'Buscar'}
+            </button>
           </div>
         </section>
 

@@ -10,6 +10,9 @@ const ALLOWED_EVENTS = [
   'cf:installProgress',
   'mod:installProgress',
   'mr:installModpack:progress',
+  'update:available',
+  'update:progress',
+  'update:ready',
 ] as const
 
 contextBridge.exposeInMainWorld('launcher', {
@@ -133,6 +136,17 @@ contextBridge.exposeInMainWorld('launcher', {
         delete (cb as any).__mrWrapped
       }
     },
+  },
+
+  // ── Updater ──────────────────────────────────────────────────────────────────
+  updater: {
+    install: () => ipcRenderer.invoke('update:install'),
+    check: () => ipcRenderer.invoke('update:check'),
+  },
+
+  // ── App ───────────────────────────────────────────────────────────────────
+  app: {
+    getVersion: () => ipcRenderer.invoke('app:getVersion'),
   },
 
   // ── Settings ─────────────────────────────────────────────────────────────────
