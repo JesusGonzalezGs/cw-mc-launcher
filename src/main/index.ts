@@ -1,5 +1,12 @@
-import 'dotenv/config'
+import dotenv from 'dotenv'
 import { app, BrowserWindow, shell } from 'electron'
+import path from 'path'
+
+// En producción el .env está junto a los recursos de la app
+dotenv.config(app.isPackaged
+  ? { path: path.join(process.resourcesPath, '.env') }
+  : {}
+)
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { registerIpcHandlers } from './ipcHandlers'

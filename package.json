@@ -10,6 +10,39 @@
     "package": "npm run build && electron-builder",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p src/renderer/tsconfig.json"
   },
+  "build": {
+    "appId": "com.cubewatcher.cwmclauncher",
+    "productName": "CW-MC Launcher",
+    "copyright": "Copyright © 2025 Cube Watcher",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "out/**/*",
+      "resources/**/*"
+    ],
+    "extraResources": [
+      { "from": ".env", "to": ".env" }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis",     "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ],
+      "icon": "resources/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "CW-MC Launcher",
+      "uninstallDisplayName": "CW-MC Launcher"
+    },
+    "portable": {
+      "artifactName": "CW-MC-Launcher-${version}-portable.exe"
+    }
+  },
   "dependencies": {
     "dotenv": "^17.3.1",
     "electron-store": "^8.1.0",
