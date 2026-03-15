@@ -1,15 +1,8 @@
-import dotenv from 'dotenv'
 import { app, BrowserWindow, shell, ipcMain } from 'electron'
-import path, { join } from 'path'
+import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { autoUpdater } from 'electron-updater'
 import { registerIpcHandlers } from './ipcHandlers'
-
-// En producción el .env está junto a los recursos de la app
-dotenv.config(app.isPackaged
-  ? { path: path.join(process.resourcesPath, '.env') }
-  : {}
-)
 
 // Descarga automáticamente en segundo plano, instala al cerrar o al pedir
 autoUpdater.autoDownload = true
