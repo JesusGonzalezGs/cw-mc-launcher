@@ -11,9 +11,24 @@ extraResources:
   - from: resources/icon.png
     to: icon.png
 
+publish:
+  provider: github
+  releaseType: release
+
 win:
-  target: portable
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
   icon: resources/icon.png
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: resources/icon.png
+  uninstallerIcon: resources/icon.png
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
 mac:
   target: dmg
   icon: resources/icon.png
