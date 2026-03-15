@@ -1,6 +1,6 @@
 {
   "name": "cw-mc-launcher",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Minecraft Java client launcher by Cube Watcher",
   "main": "out/main/index.js",
   "scripts": {
