@@ -74,7 +74,8 @@ function formatDownloads(n: number): string {
 export default function CatalogPage() {
   const navigate = useNavigate()
 
-  const [source, setSource] = useState<'cf' | 'mr'>('cf')
+  const [source, setSource]       = useState<'cf' | 'mr'>('cf')
+  const [settingsReady, setSettingsReady] = useState(false)
 
   // Shared filters
   const [inputQuery, setInputQuery] = useState('')
@@ -105,11 +106,11 @@ export default function CatalogPage() {
   const cfFetchIdRef = useRef(0)
   const mrFetchIdRef = useRef(0)
 
-  // Load source from settings on mount
+  // Load source from settings on mount — esperar antes de lanzar fetches
   useEffect(() => {
     window.launcher.settings.get().then((s: any) => {
       if (s?.modSource) setSource(s.modSource)
-    }).catch(() => {})
+    }).catch(() => {}).finally(() => setSettingsReady(true))
   }, [])
 
   // Debounce text search
@@ -217,14 +218,16 @@ export default function CatalogPage() {
     }
   }, [query, mcFilter, loaderFilter, mrSortOption])
 
-  // Auto-fetch on filter changes
+  // Auto-fetch on filter changes — solo cuando settings ya cargaron
   useEffect(() => {
+    if (!settingsReady) return
     if (source === 'cf') fetchCf(0)
-  }, [query, mcFilter, loaderFilter, cfSortOption, categoryId, source])
+  }, [query, mcFilter, loaderFilter, cfSortOption, categoryId, source, settingsReady])
 
   useEffect(() => {
+    if (!settingsReady) return
     if (source === 'mr') fetchMr(0)
-  }, [query, mcFilter, loaderFilter, mrSortOption, source])
+  }, [query, mcFilter, loaderFilter, mrSortOption, source, settingsReady])
 
   // ── Computed ────────────────────────────────────────────────────────────────
   const totalCount = source === 'cf' ? cfTotalCount : mrTotalCount
@@ -358,7 +361,7 @@ export default function CatalogPage() {
               <PackageSearch size={28} className="text-red-500/60" />
             </div>
             <div className="text-center">
-              <p className="font-semibold text-sm text-red-400 mb-1">Error al consultar el repositorio de Modrinth</p>
+              <p className="font-semibold text-sm text-red-400 mb-1">Error al consultar el repositorio de {source === 'cf' ? 'CurseForge' : 'Modrinth'}</p>
               <p className="text-xs text-gray-600">{error}</p>
             </div>
             <button
