@@ -4,4 +4,4 @@ package-lock.json
 dist
 .env
 .claude
-.gi
+.claude/settings.local.json
