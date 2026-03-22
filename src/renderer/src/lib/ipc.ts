@@ -47,6 +47,8 @@ declare global {
         installModWithDeps: (instanceId: string, modId: number, fileId: number) => Promise<any>
         identifyMods: (instanceId: string) => Promise<any>
         openFolder: (id: string) => Promise<void>
+        watchMods: (id: string) => Promise<void>
+        unwatchMods: (id: string) => Promise<void>
         toggleFile: (id: string, folder: string, filename: string) => Promise<string>
         installFile: (id: string, folder: string, modId: number, fileId: number) => Promise<{ ok: boolean; filename: string }>
         listFolder: (id: string, folder: string) => Promise<{ name: string; isDir: boolean }[]>

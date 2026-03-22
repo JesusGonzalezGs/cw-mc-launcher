@@ -746,13 +746,15 @@ export default function InstanceDetailPage() {
                             <FolderOpen size={12} />
                             Carpeta
                           </button>
-                          <button
-                            onClick={() => openCatalog(resourceTab)}
-                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-purple-200 transition-colors"
-                          >
-                            <Plus size={12} />
-                            Catálogo
-                          </button>
+                          {instance.modLoader !== 'vanilla' && (
+                            <button
+                              onClick={() => openCatalog(resourceTab)}
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-purple-200 transition-colors"
+                            >
+                              <Plus size={12} />
+                              Catálogo
+                            </button>
+                          )}
                         </div>
                       </div>
                       <div className="overflow-y-auto px-4 pb-4 custom-scrollbar max-h-[460px] min-h-[140px]">
@@ -775,16 +777,22 @@ export default function InstanceDetailPage() {
                             </div>
                             <div>
                               <p className="text-gray-400 text-sm font-medium">{emptyMsg}</p>
-                              {note && <p className="text-gray-600 text-xs mt-1">{note}</p>}
+                              <p className="text-gray-600 text-xs mt-1">
+                                {instance.modLoader === 'vanilla'
+                                  ? 'Vanilla no soporta recursos del catálogo — usa Forge, Fabric u otro loader'
+                                  : note}
+                              </p>
                             </div>
                             <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => openCatalog(resourceTab)}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-300 hover:text-purple-200 bg-purple-500/15 hover:bg-purple-500/25 rounded-xl transition-colors"
-                              >
-                                <Plus size={11} />
-                                Catálogo
-                              </button>
+                              {instance.modLoader !== 'vanilla' && (
+                                <button
+                                  onClick={() => openCatalog(resourceTab)}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-300 hover:text-purple-200 bg-purple-500/15 hover:bg-purple-500/25 rounded-xl transition-colors"
+                                >
+                                  <Plus size={11} />
+                                  Catálogo
+                                </button>
+                              )}
                               <button
                                 onClick={() => window.launcher.instances.listFolder(id!, resourceTab)
                                   .then(entries => setResourceFiles(prev => ({ ...prev, [resourceTab]: entries })))}
