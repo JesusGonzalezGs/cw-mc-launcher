@@ -82,7 +82,9 @@ app.whenReady().then(() => {
       const result = await autoUpdater.checkForUpdates().catch(() => null)
       return result ? { hasUpdate: true, version: result.updateInfo.version } : { hasUpdate: false }
     })
-
+  } else {
+    ipcMain.handle('update:install', () => {})
+    ipcMain.handle('update:check', () => ({ hasUpdate: false }))
   }
 })
 
