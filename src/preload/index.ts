@@ -13,6 +13,7 @@ const ALLOWED_EVENTS = [
   'update:available',
   'update:progress',
   'update:ready',
+  'mods:changed',
 ] as const
 
 contextBridge.exposeInMainWorld('launcher', {
@@ -69,6 +70,8 @@ contextBridge.exposeInMainWorld('launcher', {
     identifyMods: (instanceId: string) =>
       ipcRenderer.invoke('instances:identifyMods', instanceId),
     openFolder: (id: string) => ipcRenderer.invoke('instances:openFolder', id),
+    watchMods: (id: string) => ipcRenderer.invoke('instances:watchMods', id),
+    unwatchMods: (id: string) => ipcRenderer.invoke('instances:unwatchMods', id),
     toggleFile: (id: string, folder: string, filename: string) => ipcRenderer.invoke('instances:toggleFile', id, folder, filename),
     installFile: (id: string, folder: string, modId: number, fileId: number) => ipcRenderer.invoke('instances:installFile', id, folder, modId, fileId),
     listFolder: (id: string, folder: string) => ipcRenderer.invoke('instances:listFolder', id, folder),

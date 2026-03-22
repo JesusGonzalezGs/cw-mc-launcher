@@ -4,7 +4,7 @@
 import path from 'path'
 import fs from 'fs'
 import os from 'os'
-import { getInstanceDir, createInstance, deleteInstance } from './instanceManager'
+import { getInstanceDir, createInstance, deleteInstance, getInstance } from './instanceManager'
 import { downloadFile } from '../utils/downloadHelper'
 import { extractZip } from '../utils/platform'
 import { downloadVersionFiles } from './gameDownloader'
@@ -80,12 +80,36 @@ export async function mrGetVersion(id: string): Promise<any> {
   return mrFetch(`/version/${id}`)
 }
 
+export interface MrInstallResult {
+  ok: boolean
+  filename: string
+  depsInstalled: { filename: string; name: string }[]
+  depsFailed: { slug: string; error: string }[]
+}
+
 export async function mrInstallVersion(
   instanceId: string,
   versionId: string,
   folder: string = 'mods',
   mrSlug?: string,
-): Promise<{ ok: boolean; filename: string }> {
+): Promise<MrInstallResult> {
+  const depsInstalled: { filename: string; name: string }[] = []
+  const depsFailed: { slug: string; error: string }[] = []
+  const result = await _mrInstallVersionInternal(
+    instanceId, versionId, folder, mrSlug, new Set(), depsInstalled, depsFailed,
+  )
+  return { ok: true, filename: result.filename, depsInstalled, depsFailed }
+}
+
+async function _mrInstallVersionInternal(
+  instanceId: string,
+  versionId: string,
+  folder: string,
+  mrSlug: string | undefined,
+  seen: Set<string>,
+  depsInstalled: { filename: string; name: string }[],
+  depsFailed: { slug: string; error: string }[],
+): Promise<{ filename: string }> {
   const version = await mrGetVersion(versionId)
   const primaryFile = version.files.find((f: any) => f.primary) ?? version.files[0]
   if (!primaryFile) throw new Error('No hay archivos en esta versión de Modrinth')
@@ -102,10 +126,15 @@ export async function mrInstallVersion(
     const modsJson = readModsJson(instanceId)
     const existingEntry = Object.values(modsJson.mods).find(m => m.mrSlug === mrSlug)
     if (!existingEntry) {
+      let projectTitle = mrSlug
+      try {
+        const project = await mrGetProject(version.project_id)
+        projectTitle = project.title ?? mrSlug
+      } catch {}
       modsJson.mods[primaryFile.filename] = {
         modId: 0,
         fileId: 0,
-        name: version.name ?? mrSlug,
+        name: projectTitle,
         slug: '',
         mrSlug,
         gameVersions: version.game_versions ?? [],
@@ -114,7 +143,57 @@ export async function mrInstallVersion(
     }
   }
 
-  return { ok: true, filename: primaryFile.filename }
+  // Install required dependencies (only for mods folder)
+  if (folder === 'mods') {
+    const requiredDeps: any[] = (version.dependencies ?? []).filter(
+      (d: any) => d.dependency_type === 'required' && d.project_id,
+    )
+    if (requiredDeps.length > 0) {
+      const { readModsJson } = await import('./modManager')
+      const instance = getInstance(instanceId)
+
+      for (const dep of requiredDeps) {
+        const projectId: string = dep.project_id
+        if (seen.has(projectId)) continue
+        seen.add(projectId)
+
+        try {
+          const project = await mrGetProject(projectId)
+          const depSlug: string = project.slug
+
+          const modsJson = readModsJson(instanceId)
+          const alreadyInstalled = Object.values(modsJson.mods).some(m => m.mrSlug === depSlug)
+          if (alreadyInstalled) continue
+
+          let depVersionId: string = dep.version_id
+          if (!depVersionId) {
+            const gameVersions = instance?.mcVersion ? [instance.mcVersion] : undefined
+            const loaders =
+              instance?.modLoader && instance.modLoader !== 'vanilla'
+                ? [instance.modLoader]
+                : undefined
+            const depVersions = await mrGetProjectVersions(projectId, gameVersions, loaders)
+            if (depVersions.length === 0) {
+              depsFailed.push({ slug: depSlug, error: 'Sin versiones compatibles' })
+              continue
+            }
+            depVersionId = depVersions[0].id
+          }
+
+          const depResult = await _mrInstallVersionInternal(
+            instanceId, depVersionId, 'mods', depSlug, seen, depsInstalled, depsFailed,
+          )
+          depsInstalled.push({ filename: depResult.filename, name: project.title ?? depSlug })
+        } catch (err: any) {
+          const project = await mrGetProject(dep.project_id).catch(() => null)
+          const slug = project?.slug ?? dep.project_id
+          depsFailed.push({ slug, error: err?.message ?? 'Error desconocido' })
+        }
+      }
+    }
+  }
+
+  return { filename: primaryFile.filename }
 }
 
 /** Parses Modrinth dependency key into ModLoader */

@@ -3,9 +3,12 @@
  */
 import fs from 'fs'
 import path from 'path'
+import crypto from 'crypto'
 import { getInstanceDir, getModsDir } from './instanceManager'
 import { cfGetFileDetails, cfGetModFiles, cfGetMod, cfGetDownloadUrl, cfFingerprint, cfGetFingerprintMatches } from './curseforgeService'
 import { downloadFile } from '../utils/downloadHelper'
+
+const MR_HEADERS = { 'User-Agent': 'cw-mc-launcher/0.1.0', 'Accept': 'application/json', 'Content-Type': 'application/json' }
 
 export interface ModMeta {
   modId: number
@@ -13,6 +16,7 @@ export interface ModMeta {
   name: string
   slug: string
   mrSlug?: string
+  mrResolved?: boolean
   logo?: string
   summary?: string
   gameVersions: string[]
@@ -160,72 +164,156 @@ export async function identifyMods(
   if (allFiles.length === 0) return
 
   const modsJson = readModsJson(instanceId)
+  const { getInstance } = await import('./instanceManager')
+  const instance = getInstance(instanceId)
+  const isModrinth = instance?.source === 'modrinth'
 
-  // Collect files that need identification (no recognized field yet)
-  const toIdentify: { filename: string; cleanName: string; fingerprint: number }[] = []
+  // Collect files that need identification
+  const toIdentify: { filename: string; cleanName: string }[] = []
   for (const filename of allFiles) {
     const cleanName = filename.replace('.jar.disabled', '.jar')
     const existing = modsJson.mods[cleanName] ?? modsJson.mods[filename]
-    if (existing?.recognized === false) continue
-    if (existing?.recognized === true && existing?.deps !== undefined) continue
-    try {
-      const buf = fs.readFileSync(path.join(modsDir, filename))
-      toIdentify.push({ filename, cleanName, fingerprint: cfFingerprint(buf) })
-    } catch { /* skip unreadable */ }
+    if (existing?.recognized === true) continue
+    if (existing?.mrResolved) continue
+    toIdentify.push({ filename, cleanName })
   }
 
   if (toIdentify.length === 0) return
   onProgress?.(`Identificando ${toIdentify.length} mod${toIdentify.length > 1 ? 's' : ''}...`)
 
-  let result: any
-  try {
-    result = await cfGetFingerprintMatches(toIdentify.map(f => f.fingerprint))
-  } catch { return }
-
-  const exactMatches: any[] = result?.data?.exactMatches ?? []
-  const matchedFps = new Set<number>()
-  const fpToEntry = new Map(toIdentify.map(f => [f.fingerprint, f]))
-
-  for (const match of exactMatches) {
-    const fp: number = match.file?.fileFingerprint
-    const entry = fpToEntry.get(fp)
-    if (!entry) continue
-    matchedFps.add(fp)
-
-    const modId: number = match.id
-    const fileId: number = match.file?.id ?? 0
-    const gameVersions: string[] = match.file?.gameVersions ?? []
-    const deps: number[] = (match.file?.dependencies ?? [])
-      .filter((d: any) => d.relationType === 3)
-      .map((d: any) => d.modId as number)
-
-    let name = entry.cleanName.replace('.jar', '')
-    let slug = ''
-    let logo: string | undefined
-    let summary: string | undefined
-
-    try {
-      const modData = (await cfGetMod(modId)) as any
-      const mod = modData?.data
-      if (mod) { name = mod.name ?? name; slug = mod.slug ?? ''; logo = mod.logo?.thumbnailUrl; summary = mod.summary }
-    } catch { /* use filename as name */ }
-
-    modsJson.mods[entry.cleanName] = {
-      ...(modsJson.mods[entry.cleanName] ?? {}),
-      modId, fileId, name, slug, logo, summary, gameVersions, recognized: true, deps,
+  if (isModrinth) {
+    // ── Modrinth: hash-based lookup via POST /version_files ─────────────────
+    const withHash: { filename: string; cleanName: string; sha1: string }[] = []
+    for (const { filename, cleanName } of toIdentify) {
+      try {
+        const buf = fs.readFileSync(path.join(modsDir, filename))
+        const sha1 = crypto.createHash('sha1').update(buf).digest('hex')
+        withHash.push({ filename, cleanName, sha1 })
+      } catch { /* skip unreadable */ }
     }
-    if (entry.filename !== entry.cleanName) delete modsJson.mods[entry.filename]
-  }
 
-  // Mark unmatched
-  for (const { fingerprint, cleanName } of toIdentify) {
-    if (matchedFps.has(fingerprint)) continue
-    modsJson.mods[cleanName] = {
-      modId: 0, fileId: 0, gameVersions: [],
-      ...(modsJson.mods[cleanName] ?? {}),
-      name: modsJson.mods[cleanName]?.name ?? cleanName.replace('.jar', ''),
-      slug: modsJson.mods[cleanName]?.slug ?? '',
-      recognized: false,
+    if (withHash.length === 0) { writeModsJson(instanceId, modsJson); return }
+
+    let matched: Record<string, any> = {}
+    try {
+      const res = await fetch('https://api.modrinth.com/v2/version_files', {
+        method: 'POST',
+        headers: MR_HEADERS,
+        body: JSON.stringify({ hashes: withHash.map(f => f.sha1), algorithm: 'sha1' }),
+      })
+      if (res.ok) matched = await res.json()
+    } catch { /* leave all unmatched */ }
+
+    // Batch-fetch project info for all matched versions
+    const projectIds = [...new Set(Object.values(matched).map((v: any) => v.project_id as string))]
+    const projects: Record<string, any> = {}
+    if (projectIds.length > 0) {
+      try {
+        const res = await fetch(`https://api.modrinth.com/v2/projects?ids=${encodeURIComponent(JSON.stringify(projectIds))}`, { headers: MR_HEADERS })
+        if (res.ok) {
+          const list = (await res.json()) as any[]
+          for (const p of list) projects[p.id] = p
+        }
+      } catch { /* use version data as fallback */ }
+    }
+
+    const matchedHashes = new Set<string>()
+    for (const { filename, cleanName, sha1 } of withHash) {
+      const version = matched[sha1]
+      if (!version) continue
+      matchedHashes.add(sha1)
+      const project = projects[version.project_id]
+      modsJson.mods[cleanName] = {
+        ...(modsJson.mods[cleanName] ?? {}),
+        modId: 0, fileId: 0,
+        name: project?.title ?? cleanName.replace('.jar', ''),
+        slug: '',
+        mrSlug: project?.slug ?? modsJson.mods[cleanName]?.mrSlug ?? '',
+        logo: project?.icon_url,
+        summary: project?.description,
+        gameVersions: version.game_versions ?? [],
+        mrResolved: true,
+        recognized: true,
+      }
+      if (filename !== cleanName) delete modsJson.mods[filename]
+    }
+
+    // Mark unmatched
+    for (const { sha1, cleanName } of withHash) {
+      if (matchedHashes.has(sha1)) continue
+      const existing = modsJson.mods[cleanName]
+      modsJson.mods[cleanName] = {
+        modId: 0, fileId: 0, gameVersions: [],
+        ...(existing ?? {}),
+        name: existing?.name ?? cleanName.replace('.jar', ''),
+        slug: existing?.slug ?? '',
+        mrResolved: true,
+        recognized: false,
+      }
+    }
+  } else {
+    // ── CurseForge: fingerprint matching ────────────────────────────────────
+    const withFingerprint: { filename: string; cleanName: string; fingerprint: number }[] = []
+    for (const entry of toIdentify) {
+      try {
+        const buf = fs.readFileSync(path.join(modsDir, entry.filename))
+        withFingerprint.push({ ...entry, fingerprint: cfFingerprint(buf) })
+      } catch { /* skip unreadable */ }
+    }
+
+    if (withFingerprint.length === 0) return
+
+    let result: any
+    try {
+      result = await cfGetFingerprintMatches(withFingerprint.map(f => f.fingerprint))
+    } catch { return }
+
+    const exactMatches: any[] = result?.data?.exactMatches ?? []
+    const matchedFps = new Set<number>()
+    const fpToEntry = new Map(withFingerprint.map(f => [f.fingerprint, f]))
+
+    for (const match of exactMatches) {
+      const fp: number = match.file?.fileFingerprint
+      const entry = fpToEntry.get(fp)
+      if (!entry) continue
+      matchedFps.add(fp)
+
+      const modId: number = match.id
+      const fileId: number = match.file?.id ?? 0
+      const gameVersions: string[] = match.file?.gameVersions ?? []
+      const deps: number[] = (match.file?.dependencies ?? [])
+        .filter((d: any) => d.relationType === 3)
+        .map((d: any) => d.modId as number)
+
+      let name = entry.cleanName.replace('.jar', '')
+      let slug = ''
+      let logo: string | undefined
+      let summary: string | undefined
+
+      try {
+        const modData = (await cfGetMod(modId)) as any
+        const mod = modData?.data
+        if (mod) { name = mod.name ?? name; slug = mod.slug ?? ''; logo = mod.logo?.thumbnailUrl; summary = mod.summary }
+      } catch { /* use filename as name */ }
+
+      modsJson.mods[entry.cleanName] = {
+        ...(modsJson.mods[entry.cleanName] ?? {}),
+        modId, fileId, name, slug, logo, summary, gameVersions, recognized: true, deps,
+      }
+      if (entry.filename !== entry.cleanName) delete modsJson.mods[entry.filename]
+    }
+
+    // Mark unmatched
+    for (const { fingerprint, cleanName } of withFingerprint) {
+      if (matchedFps.has(fingerprint)) continue
+      const existing = modsJson.mods[cleanName]
+      modsJson.mods[cleanName] = {
+        modId: 0, fileId: 0, gameVersions: [],
+        ...(existing ?? {}),
+        name: existing?.name ?? cleanName.replace('.jar', ''),
+        slug: existing?.slug ?? '',
+        recognized: false,
+      }
     }
   }
 

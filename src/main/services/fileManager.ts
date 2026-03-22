@@ -4,15 +4,19 @@
  */
 import fs from 'fs'
 import path from 'path'
-import { getInstanceDir } from './instanceManager'
+import crypto from 'crypto'
+import { getInstanceDir, getInstance } from './instanceManager'
 import { cfGetDownloadUrl, cfGetMod, cfGetFileDetails, cfFingerprint, cfGetFingerprintMatches } from './curseforgeService'
 import { downloadFile } from '../utils/downloadHelper'
+
+const MR_HEADERS = { 'User-Agent': 'cw-mc-launcher/0.1.0', 'Accept': 'application/json', 'Content-Type': 'application/json' }
 
 export interface FileMeta {
   modId: number
   fileId: number
   name: string
   slug: string
+  mrSlug?: string
   logo?: string
   summary?: string
   recognized?: boolean
@@ -91,75 +95,126 @@ export async function identifyFiles(
   const dir = path.join(getInstanceDir(instanceId), folder)
   if (!fs.existsSync(dir)) return
 
-  const allEntries = fs.readdirSync(dir)
   const json = readFilesJson(instanceId, folder)
+  const instance = getInstance(instanceId)
+  const isModrinth = instance?.source === 'modrinth'
 
-  // Classify entries
-  const toIdentify: { filename: string; cleanName: string; fingerprint: number }[] = []
-  for (const filename of allEntries) {
+  const toIdentify: { filename: string; cleanName: string }[] = []
+  for (const filename of fs.readdirSync(dir)) {
     if (!filename.endsWith('.zip') && !filename.endsWith('.zip.disabled')) continue
-    const fullPath = path.join(dir, filename)
-    if (!fs.statSync(fullPath).isFile()) continue
+    if (!fs.statSync(path.join(dir, filename)).isFile()) continue
     const cleanName = filename.replace('.disabled', '')
     const existing = json.files[cleanName] ?? json.files[filename]
     if (existing?.recognized !== undefined) continue
-    try {
-      const buf = fs.readFileSync(fullPath)
-      toIdentify.push({ filename, cleanName, fingerprint: cfFingerprint(buf) })
-    } catch { /* skip unreadable */ }
+    toIdentify.push({ filename, cleanName })
   }
 
-  // Save folder/other classifications immediately
   writeFilesJson(instanceId, folder, json)
-
   if (toIdentify.length === 0) return
   onProgress?.(`Identificando ${toIdentify.length} archivo${toIdentify.length > 1 ? 's' : ''}...`)
 
-  let result: any
-  try {
-    result = await cfGetFingerprintMatches(toIdentify.map(f => f.fingerprint))
-  } catch { return }
-
-  const exactMatches: any[] = result?.data?.exactMatches ?? []
-  const matchedFps = new Set<number>()
-  const fpToEntry = new Map(toIdentify.map(f => [f.fingerprint, f]))
-
-  for (const match of exactMatches) {
-    const fp: number = match.file?.fileFingerprint
-    const entry = fpToEntry.get(fp)
-    if (!entry) continue
-
-    const modId: number = match.id
-    if (!modId) continue  // CF returned invalid modId — treat as unmatched
-    matchedFps.add(fp)
-    const fileId: number = match.file?.id ?? 0
-    let name = entry.cleanName.replace('.zip', '')
-    let slug = ''
-    let logo: string | undefined
-    let summary: string | undefined
-
-    try {
-      const modData = (await cfGetMod(modId)) as any
-      const mod = modData?.data
-      if (mod) { name = mod.name ?? name; slug = mod.slug ?? ''; logo = mod.logo?.thumbnailUrl; summary = mod.summary }
-    } catch { /* use filename as name */ }
-
-    json.files[entry.cleanName] = {
-      ...(json.files[entry.cleanName] ?? {}),
-      modId, fileId, name, slug, logo, summary, recognized: true,
+  if (isModrinth) {
+    // ── Modrinth: SHA1 hash lookup ──────────────────────────────────────────
+    const withHash: { filename: string; cleanName: string; sha1: string }[] = []
+    for (const entry of toIdentify) {
+      try {
+        const buf = fs.readFileSync(path.join(dir, entry.filename))
+        withHash.push({ ...entry, sha1: crypto.createHash('sha1').update(buf).digest('hex') })
+      } catch { /* skip */ }
     }
-    if (entry.filename !== entry.cleanName) delete json.files[entry.filename]
-  }
 
-  // Mark unmatched
-  for (const { fingerprint, cleanName } of toIdentify) {
-    if (matchedFps.has(fingerprint)) continue
-    json.files[cleanName] = {
-      modId: 0, fileId: 0,
-      ...(json.files[cleanName] ?? {}),
-      name: json.files[cleanName]?.name ?? cleanName.replace('.zip', ''),
-      slug: json.files[cleanName]?.slug ?? '',
-      recognized: false,
+    let matched: Record<string, any> = {}
+    try {
+      const res = await fetch('https://api.modrinth.com/v2/version_files', {
+        method: 'POST', headers: MR_HEADERS,
+        body: JSON.stringify({ hashes: withHash.map(f => f.sha1), algorithm: 'sha1' }),
+      })
+      if (res.ok) matched = await res.json()
+    } catch { /* leave unmatched */ }
+
+    const projectIds = [...new Set(Object.values(matched).map((v: any) => v.project_id as string))]
+    const projects: Record<string, any> = {}
+    if (projectIds.length > 0) {
+      try {
+        const res = await fetch(`https://api.modrinth.com/v2/projects?ids=${encodeURIComponent(JSON.stringify(projectIds))}`, { headers: MR_HEADERS })
+        if (res.ok) { for (const p of (await res.json()) as any[]) projects[p.id] = p }
+      } catch { /* use version data as fallback */ }
+    }
+
+    const matchedHashes = new Set<string>()
+    for (const { filename, cleanName, sha1 } of withHash) {
+      const version = matched[sha1]
+      if (!version) continue
+      matchedHashes.add(sha1)
+      const project = projects[version.project_id]
+      json.files[cleanName] = {
+        ...(json.files[cleanName] ?? {}),
+        modId: 0, fileId: 0,
+        name: project?.title ?? cleanName.replace('.zip', ''),
+        slug: project?.slug ?? '',
+        mrSlug: project?.slug,
+        logo: project?.icon_url,
+        summary: project?.description,
+        recognized: true,
+      }
+      if (filename !== cleanName) delete json.files[filename]
+    }
+
+    for (const { sha1, cleanName } of withHash) {
+      if (matchedHashes.has(sha1)) continue
+      const existing = json.files[cleanName]
+      json.files[cleanName] = {
+        modId: 0, fileId: 0,
+        ...(existing ?? {}),
+        name: existing?.name ?? cleanName.replace('.zip', ''),
+        slug: existing?.slug ?? '',
+        recognized: false,
+      }
+    }
+  } else {
+    // ── CurseForge: fingerprint matching ────────────────────────────────────
+    const withFp: { filename: string; cleanName: string; fingerprint: number }[] = []
+    for (const entry of toIdentify) {
+      try {
+        const buf = fs.readFileSync(path.join(dir, entry.filename))
+        withFp.push({ ...entry, fingerprint: cfFingerprint(buf) })
+      } catch { /* skip */ }
+    }
+
+    if (withFp.length === 0) return
+    let result: any
+    try { result = await cfGetFingerprintMatches(withFp.map(f => f.fingerprint)) } catch { return }
+
+    const exactMatches: any[] = result?.data?.exactMatches ?? []
+    const matchedFps = new Set<number>()
+    const fpToEntry = new Map(withFp.map(f => [f.fingerprint, f]))
+
+    for (const match of exactMatches) {
+      const fp: number = match.file?.fileFingerprint
+      const entry = fpToEntry.get(fp)
+      if (!entry) continue
+      const modId: number = match.id
+      if (!modId) continue
+      matchedFps.add(fp)
+      const fileId: number = match.file?.id ?? 0
+      let name = entry.cleanName.replace('.zip', '')
+      let slug = '', logo: string | undefined, summary: string | undefined
+      try {
+        const mod = ((await cfGetMod(modId)) as any)?.data
+        if (mod) { name = mod.name ?? name; slug = mod.slug ?? ''; logo = mod.logo?.thumbnailUrl; summary = mod.summary }
+      } catch { /* use filename */ }
+      json.files[entry.cleanName] = { ...(json.files[entry.cleanName] ?? {}), modId, fileId, name, slug, logo, summary, recognized: true }
+      if (entry.filename !== entry.cleanName) delete json.files[entry.filename]
+    }
+
+    for (const { fingerprint, cleanName } of withFp) {
+      if (matchedFps.has(fingerprint)) continue
+      const existing = json.files[cleanName]
+      json.files[cleanName] = {
+        modId: 0, fileId: 0, ...(existing ?? {}),
+        name: existing?.name ?? cleanName.replace('.zip', ''),
+        slug: existing?.slug ?? '', recognized: false,
+      }
     }
   }
 

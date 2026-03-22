@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { marked } from 'marked'
 import {
   X, Search, Package, Download, RefreshCw,
   ChevronLeft, ChevronRight, Tag, Layers, ArrowUpDown, Flame, Leaf,
@@ -255,7 +256,7 @@ function ModCard({ mod, source, installing, installed, error, onInstall, onDetai
 // ── DepsNotice type ────────────────────────────────────────────────────────────
 interface DepsNotice {
   deps: { filename: string; name: string }[]
-  failedDeps: { modId: number; error: string }[]
+  failedDeps: { modId: number; name?: string; error: string }[]
 }
 
 // ── ModDetailView ──────────────────────────────────────────────────────────────
@@ -338,7 +339,7 @@ function ModDetailView({ mod, source, installing, installed, installError, onIns
     setLoadingDesc(true)
     const descP: Promise<string> = isCf
       ? (window.launcher.cf.getModDescription(mod.id) as Promise<string>)
-      : mrGetProject(mod.project_id).then((p: any) => { setMrGallery(p.gallery ?? []); return p.body ?? '' })
+      : mrGetProject(mod.project_id).then((p: any) => { setMrGallery(p.gallery ?? []); return marked.parse(p.body ?? '') as string })
     descP.then(setDescription).catch(() => {}).finally(() => setLoadingDesc(false))
 
     setLoadingVersions(true)
@@ -373,7 +374,7 @@ function ModDetailView({ mod, source, installing, installed, installError, onIns
         <div className="mx-4 mt-3 rounded-xl px-4 py-3 flex items-start gap-3 border bg-purple-500/10 border-purple-500/25 flex-shrink-0">
           <div className="flex-1 min-w-0">
             {depsNotice.deps.length > 0 && <p className="text-xs font-medium text-purple-300">Dependencias instaladas: {depsNotice.deps.map(d => d.name).join(', ')}</p>}
-            {depsNotice.failedDeps.length > 0 && <p className="text-xs mt-0.5 text-red-400">No se pudieron instalar: {depsNotice.failedDeps.map(d => `mod ${d.modId}`).join(', ')}</p>}
+            {depsNotice.failedDeps.length > 0 && <p className="text-xs mt-0.5 text-red-400">No se pudieron instalar: {depsNotice.failedDeps.map(d => d.name ?? `mod ${d.modId}`).join(', ')}</p>}
           </div>
           <button onClick={onClearDeps} className="p-0.5 rounded flex-shrink-0 text-gray-500 hover:text-gray-300"><X size={13} /></button>
         </div>
@@ -439,11 +440,7 @@ function ModDetailView({ mod, source, installing, installed, installError, onIns
         </div>
         <div className="p-5">
           {detailTab === 'desc' && (loadingDesc ? <div className="h-32 rounded-xl animate-pulse bg-gray-700/50" /> : description ? (
-            isCf ? (
-              <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40 text-gray-300 text-sm leading-relaxed [&_a]:text-purple-400 [&_a:hover]:text-purple-300 [&_img]:rounded-lg [&_img]:max-w-full [&_h1]:text-white [&_h1]:font-bold [&_h1]:text-base [&_h2]:text-white [&_h2]:font-semibold [&_h3]:text-gray-200 [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-1 [&_p]:mt-2 overflow-hidden" dangerouslySetInnerHTML={{ __html: description }} />
-            ) : (
-              <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40 text-gray-300 text-sm leading-relaxed overflow-hidden whitespace-pre-wrap">{description}</div>
-            )
+            <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40 text-gray-300 text-sm leading-relaxed [&_a]:text-purple-400 [&_a:hover]:text-purple-300 [&_img]:rounded-lg [&_img]:max-w-full [&_h1]:text-white [&_h1]:font-bold [&_h1]:text-base [&_h2]:text-white [&_h2]:font-semibold [&_h3]:text-gray-200 [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-1 [&_p]:mt-2 overflow-hidden" dangerouslySetInnerHTML={{ __html: description }} />
           ) : <p className="text-sm text-gray-600">Sin descripción disponible.</p>)}
 
           {detailTab === 'versions' && (
@@ -613,6 +610,28 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
     if (!selectedMod) inputRef.current?.focus()
   }, [selectedMod])
 
+  // Local state provides instant optimistic feedback; sync effects below remove local entries
+  // when parent no longer has them (handles deletion showing as installed).
+  useEffect(() => {
+    if (!parentInstalledIds) return
+    setInstalledIds(prev => {
+      if (prev.size === 0) return prev
+      const next = new Set<number>()
+      for (const id of prev) { if (parentInstalledIds.has(id)) next.add(id) }
+      return next.size !== prev.size ? next : prev
+    })
+  }, [parentInstalledIds])
+
+  useEffect(() => {
+    if (!parentInstalledMrSlugs) return
+    setInstalledMrSlugs(prev => {
+      if (prev.size === 0) return prev
+      const next = new Set<string>()
+      for (const slug of prev) { if (parentInstalledMrSlugs.has(slug)) next.add(slug) }
+      return next.size !== prev.size ? next : prev
+    })
+  }, [parentInstalledMrSlugs])
+
   const isCfInstalled = (modId: number) => installedIds.has(modId) || (parentInstalledIds?.has(modId) ?? false)
   const isMrInstalled = (slug: string) => installedMrSlugs.has(slug) || (parentInstalledMrSlugs?.has(slug) ?? false)
 
@@ -640,9 +659,16 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
   const installMrMod = async (mod: any, versionId: string) => {
     setInstalling({ id: mod.project_id, versionId })
     setInstallErrors(prev => { const n = { ...prev }; delete n[mod.project_id]; return n })
+    setDepsNotice(null)
     try {
-      await window.launcher.mr.installVersion(instance.id, versionId, 'mods', mod.slug)
+      const result = await (window.launcher.mr.installVersion(instance.id, versionId, 'mods', mod.slug) as Promise<any>)
       setInstalledMrSlugs(prev => new Set([...prev, mod.slug]))
+      if ((result.depsInstalled?.length ?? 0) > 0 || (result.depsFailed?.length ?? 0) > 0) {
+        setDepsNotice({
+          deps: result.depsInstalled ?? [],
+          failedDeps: (result.depsFailed ?? []).map((d: any) => ({ modId: 0, name: d.slug, error: d.error })),
+        })
+      }
       onModInstalled()
     } catch (err: any) {
       setInstallErrors(prev => ({ ...prev, [mod.project_id]: err.message ?? 'Error desconocido' }))
@@ -655,12 +681,19 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
   const installMrModDirect = async (mod: any) => {
     setInstalling({ id: mod.project_id })
     setInstallErrors(prev => { const n = { ...prev }; delete n[mod.project_id]; return n })
+    setDepsNotice(null)
     try {
       const vers = await mrGetProjectVersions(mod.project_id) as any[]
       const best = pickBestNormVersion(vers.map(mrVerToNormVersion), version, loader, 'mr')
       if (!best) throw new Error('No hay versión compatible')
-      await window.launcher.mr.installVersion(instance.id, best.id, 'mods', mod.slug)
+      const result = await (window.launcher.mr.installVersion(instance.id, best.id, 'mods', mod.slug) as Promise<any>)
       setInstalledMrSlugs(prev => new Set([...prev, mod.slug]))
+      if ((result.depsInstalled?.length ?? 0) > 0 || (result.depsFailed?.length ?? 0) > 0) {
+        setDepsNotice({
+          deps: result.depsInstalled ?? [],
+          failedDeps: (result.depsFailed ?? []).map((d: any) => ({ modId: 0, name: d.slug, error: d.error })),
+        })
+      }
       onModInstalled()
     } catch (err: any) {
       setInstallErrors(prev => ({ ...prev, [mod.project_id]: err.message ?? 'Error desconocido' }))
@@ -712,7 +745,7 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
               onBack={() => setSelectedMod(null)}
               version={version}
               loader={loader}
-              depsNotice={source === 'cf' ? depsNotice : null}
+              depsNotice={depsNotice}
               onClearDeps={() => setDepsNotice(null)}
             />
           ) : (
@@ -748,11 +781,11 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
               </div>
 
               {/* Deps notice (CF only) */}
-              {source === 'cf' && depsNotice && (
+              {depsNotice && (
                 <div className="mx-4 mt-3 rounded-xl px-4 py-3 flex items-start gap-3 border bg-purple-500/10 border-purple-500/25 flex-shrink-0">
                   <div className="flex-1 min-w-0">
                     {depsNotice.deps.length > 0 && <p className="text-xs font-medium text-indigo-300">Dependencias instaladas: {depsNotice.deps.map(d => d.name).join(', ')}</p>}
-                    {depsNotice.failedDeps.length > 0 && <p className="text-xs mt-0.5 text-red-400">No se pudieron instalar: {depsNotice.failedDeps.map(d => `mod ${d.modId}`).join(', ')}</p>}
+                    {depsNotice.failedDeps.length > 0 && <p className="text-xs mt-0.5 text-red-400">No se pudieron instalar: {depsNotice.failedDeps.map(d => d.name ?? `mod ${d.modId}`).join(', ')}</p>}
                   </div>
                   <button onClick={() => setDepsNotice(null)} className="p-0.5 rounded flex-shrink-0 text-gray-500 hover:text-gray-300"><X size={13} /></button>
                 </div>

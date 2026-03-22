@@ -289,9 +289,11 @@ export function registerIpcHandlers(): void {
     const inst = getInstance(instanceId)
     if (!inst) throw new Error(`Instancia ${instanceId} no encontrada`)
     const win = getMainWindow()
-    return installModWithDeps(instanceId, modId, fileId, inst.mcVersion, inst.modLoader, (msg) => {
+    const result = await installModWithDeps(instanceId, modId, fileId, inst.mcVersion, inst.modLoader, (msg) => {
       win?.webContents.send('mod:installProgress', { instanceId, msg })
     })
+    win?.webContents.send('mods:changed', { instanceId })
+    return result
   })
 
   ipcMain.handle('instances:installMod', async (_, instanceId: string, modId: number, fileId: number) => {
@@ -462,6 +464,36 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('app:openExternal', (_, url: string) => shell.openExternal(url))
 
+  // ── Mods folder watcher ───────────────────────────────────────────────────────
+  const modsWatchers = new Map<string, { watcher: fs.FSWatcher; timer: ReturnType<typeof setTimeout> | null }>()
+
+  ipcMain.handle('instances:watchMods', (_, instanceId: string) => {
+    if (modsWatchers.has(instanceId)) return
+    const modsDir = path.join(getInstanceDir(instanceId), 'mods')
+    if (!fs.existsSync(modsDir)) return
+    const entry = { watcher: null as any, timer: null as ReturnType<typeof setTimeout> | null }
+    const emit = () => {
+      if (entry.timer) clearTimeout(entry.timer)
+      entry.timer = setTimeout(() => {
+        entry.timer = null
+        getMainWindow()?.webContents.send('mods:changed', { instanceId })
+      }, 500)
+    }
+    entry.watcher = fs.watch(modsDir, (_event, filename) => {
+      if (filename && (filename.endsWith('.jar') || filename.endsWith('.jar.disabled'))) emit()
+    })
+    entry.watcher.on('error', () => {})
+    modsWatchers.set(instanceId, entry)
+  })
+
+  ipcMain.handle('instances:unwatchMods', (_, instanceId: string) => {
+    const entry = modsWatchers.get(instanceId)
+    if (!entry) return
+    if (entry.timer) clearTimeout(entry.timer)
+    entry.watcher.close()
+    modsWatchers.delete(instanceId)
+  })
+
   // ── Modrinth ──────────────────────────────────────────────────────────────────
   ipcMain.handle('mr:search', (_, params: any) => mrSearch(params))
 
@@ -473,9 +505,12 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('mr:getVersion', (_, id: string) => mrGetVersion(id))
 
-  ipcMain.handle('mr:installVersion', (_, instanceId: string, versionId: string, folder: string, mrSlug?: string) =>
-    mrInstallVersion(instanceId, versionId, folder, mrSlug)
-  )
+  ipcMain.handle('mr:installVersion', async (_, instanceId: string, versionId: string, folder: string, mrSlug?: string) => {
+    const result = await mrInstallVersion(instanceId, versionId, folder, mrSlug)
+    const win = getMainWindow()
+    win?.webContents.send('mods:changed', { instanceId })
+    return result
+  })
 
   ipcMain.handle('mr:installModpack', async (_, projectId: string, versionId: string, name: string, logoUrl?: string) => {
     const win = getMainWindow()

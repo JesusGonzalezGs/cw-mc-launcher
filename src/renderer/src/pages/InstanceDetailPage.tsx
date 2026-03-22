@@ -23,6 +23,8 @@ interface ModMeta {
   fileId: number
   name: string
   slug: string
+  mrSlug?: string
+  mrResolved?: boolean
   logo?: string
   summary?: string
   gameVersions: string[]
@@ -69,6 +71,7 @@ export default function InstanceDetailPage() {
   const [togglingMod, setTogglingMod] = useState<string | null>(null)
   const logsRef = useRef<HTMLDivElement>(null)
   const identifiedRef = useRef(false)
+  const identifyingModsRef = useRef(false)
 
   const refreshMods = useCallback(async () => {
     if (!id) return null
@@ -104,20 +107,24 @@ export default function InstanceDetailPage() {
       if (files.length === 0) { identifiedRef.current = true; return }
       const needsId = files.some(f => {
         const clean = f.replace('.jar.disabled', '.jar')
-        return (metaMods[clean] ?? metaMods[f])?.recognized === undefined
+        const m = metaMods[clean] ?? metaMods[f]
+        return m?.recognized === undefined || (!m?.mrResolved && m?.recognized !== true)
       })
       if (needsId) {
         identifiedRef.current = true
+        identifyingModsRef.current = true
         setIdentifyingMods(true)
         window.launcher.instances.identifyMods(id)
           .then(() => refreshMods())
           .catch(() => {})
-          .finally(() => setIdentifyingMods(false))
+          .finally(() => { identifyingModsRef.current = false; setIdentifyingMods(false) })
       } else {
         identifiedRef.current = true
       }
     })
     window.launcher.instances.isRunning(id).then(setIsRunning)
+    window.launcher.instances.watchMods(id)
+    return () => { window.launcher.instances.unwatchMods(id) }
   }, [id])
 
   useEffect(() => {
@@ -137,11 +144,32 @@ export default function InstanceDetailPage() {
         }).catch(() => {})
       }
     }
+    const handleModsChanged = ({ instanceId }: any) => {
+      if (instanceId !== id) return
+      refreshMods().then(result => {
+        if (!result || identifyingModsRef.current) return
+        const { files, metaMods } = result
+        const needsId = files.some(f => {
+          const clean = f.replace('.jar.disabled', '.jar')
+          const m = metaMods[clean] ?? metaMods[f]
+        return m?.recognized === undefined || (!m?.mrResolved && m?.recognized !== true)
+        })
+        if (!needsId) return
+        identifyingModsRef.current = true
+        setIdentifyingMods(true)
+        window.launcher.instances.identifyMods(id!)
+          .then(() => refreshMods())
+          .catch(() => {})
+          .finally(() => { identifyingModsRef.current = false; setIdentifyingMods(false) })
+      })
+    }
     window.launcher.on('game:log', handleLog)
     window.launcher.on('game:stopped', handleStopped)
+    window.launcher.on('mods:changed', handleModsChanged)
     return () => {
       window.launcher.off('game:log', handleLog)
       window.launcher.off('game:stopped', handleStopped)
+      window.launcher.off('mods:changed', handleModsChanged)
     }
   }, [id])
 
@@ -501,7 +529,7 @@ export default function InstanceDetailPage() {
                     {identifyingMods && (
                       <div className="mx-4 mb-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs bg-purple-500/10 border border-purple-500/20 text-purple-300 shrink-0">
                         <RefreshCw size={11} className="animate-spin shrink-0" />
-                        Identificando mods con CurseForge…
+                        Identificando mods con {instance.source === 'modrinth' ? 'Modrinth' : 'CurseForge'}…
                       </div>
                     )}
 
@@ -642,7 +670,7 @@ export default function InstanceDetailPage() {
                       {identifyingFiles === resourceTab && (
                         <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs bg-purple-500/10 border border-purple-500/20 text-purple-300 shrink-0">
                           <RefreshCw size={11} className="animate-spin shrink-0" />
-                          Identificando archivos con CurseForge…
+                          Identificando archivos con {instance.source === 'modrinth' ? 'Modrinth' : 'CurseForge'}…
                         </div>
                       )}
 
