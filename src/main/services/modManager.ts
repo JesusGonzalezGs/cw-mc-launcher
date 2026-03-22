@@ -4,7 +4,7 @@
 import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
-import { getInstanceDir, getModsDir } from './instanceManager'
+import { getInstanceDir, getModsDir, getInstance } from './instanceManager'
 import { cfGetFileDetails, cfGetModFiles, cfGetMod, cfGetDownloadUrl, cfFingerprint, cfGetFingerprintMatches } from './curseforgeService'
 import { downloadFile } from '../utils/downloadHelper'
 
@@ -181,7 +181,6 @@ export async function identifyMods(
   if (allFiles.length === 0) return
 
   const modsJson = readModsJson(instanceId)
-  const { getInstance } = await import('./instanceManager')
   const instance = getInstance(instanceId)
   const isModrinth = instance?.source === 'modrinth' || instance?.modSource === 'mr'
 

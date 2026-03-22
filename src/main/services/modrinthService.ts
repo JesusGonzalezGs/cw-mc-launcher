@@ -9,8 +9,8 @@ import { downloadFile } from '../utils/downloadHelper'
 import { extractZip } from '../utils/platform'
 import { downloadVersionFiles } from './gameDownloader'
 import { installFabric, installQuilt, installForge, installNeoForge } from './modLoaderInstaller'
-import { identifyMods } from './modManager'
-import { identifyFiles } from './fileManager'
+import { identifyMods, readModsJson, writeModsJson } from './modManager'
+import { identifyFiles, readFilesJson, writeFilesJson } from './fileManager'
 import type { Instance } from './instanceManager'
 import type { ModLoader } from './modLoaderInstaller'
 import type { InstallProgress } from './modpackInstaller'
@@ -125,15 +125,14 @@ async function _mrInstallVersionInternal(
   // Do NOT include mrSlug here — the cleanup loop below matches by mrSlug and would delete
   // the just-downloaded file if it found its own entry.
   if (mrSlug && folder === 'mods') {
-    const { readModsJson: rMJ, writeModsJson: wMJ } = await import('./modManager')
-    const preJson = rMJ(instanceId)
+    const preJson = readModsJson(instanceId)
     if (!preJson.mods[primaryFile.filename]) {
       preJson.mods[primaryFile.filename] = {
         modId: 0, fileId: 0, name: mrSlug, slug: '',
         mrVersionId: version.id, gameVersions: version.game_versions ?? [],
         recognized: true, mrResolved: true,
       }
-      wMJ(instanceId, preJson)
+      writeModsJson(instanceId, preJson)
     }
   }
 
@@ -149,7 +148,6 @@ async function _mrInstallVersionInternal(
     } catch {}
 
     if (folder === 'mods') {
-      const { readModsJson, writeModsJson } = await import('./modManager')
       const modsJson = readModsJson(instanceId)
       // Remove old version with the same mrSlug
       for (const [existingFilename, meta] of Object.entries(modsJson.mods)) {
@@ -170,7 +168,6 @@ async function _mrInstallVersionInternal(
       }
       writeModsJson(instanceId, modsJson)
     } else {
-      const { readFilesJson, writeFilesJson } = await import('./fileManager')
       const filesJson = readFilesJson(instanceId, folder)
       // Remove old version with the same mrSlug
       for (const [existingFilename, meta] of Object.entries(filesJson.files)) {
@@ -197,7 +194,6 @@ async function _mrInstallVersionInternal(
       (d: any) => d.dependency_type === 'required' && d.project_id,
     )
     if (requiredDeps.length > 0) {
-      const { readModsJson } = await import('./modManager')
       const instance = getInstance(instanceId)
 
       for (const dep of requiredDeps) {

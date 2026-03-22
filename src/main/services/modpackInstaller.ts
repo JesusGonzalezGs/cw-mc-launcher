@@ -5,7 +5,6 @@
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { getSettings } from '../store'
 import { cfGetDownloadUrl, cfGetModsBatch } from './curseforgeService'
 import { downloadFile } from '../utils/downloadHelper'
 import { extractZip } from '../utils/platform'
@@ -207,7 +206,6 @@ export async function installCurseForgeModpack(
   ])
 
   // 12. Actualizar instancia con resolvedVersionId
-  const settings = getSettings()
   const updatedInstance: Instance = {
     ...instance,
     resolvedVersionId,

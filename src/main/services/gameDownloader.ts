@@ -98,18 +98,16 @@ export async function downloadVersionFiles(
   }
 
   // 3. Descargar libraries
+  const currentOs = isWindows ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux'
   const libraries: any[] = versionJson.libraries ?? []
   const validLibs = libraries.filter((lib) => {
     if (!lib.rules) return true
     return lib.rules.some((rule: any) => {
       if (rule.action !== 'allow') return false
       if (!rule.os) return true
-      const currentOs = isWindows ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux'
       return rule.os.name === currentOs
     })
   })
-
-  const currentOs = isWindows ? 'windows' : process.platform === 'darwin' ? 'osx' : 'linux'
   let libsDone = 0
   for (const lib of validLibs) {
     // Descargar artefacto principal

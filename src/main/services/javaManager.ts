@@ -6,7 +6,6 @@ import { app } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import os from 'os'
-import { createWriteStream } from 'fs'
 import { Readable } from 'stream'
 import { isWindows, extractZip, spawnAsync } from '../utils/platform'
 
@@ -92,7 +91,7 @@ export async function downloadJava(majorVersion: number): Promise<void> {
     let downloaded = 0
 
     await new Promise<void>((resolve, reject) => {
-      const dest = createWriteStream(tmpFile)
+      const dest = fs.createWriteStream(tmpFile)
       const body = Readable.fromWeb(dlResp.body as any)
 
       body.on('data', (chunk: Buffer) => {

@@ -10,8 +10,7 @@ import * as unzipper from 'unzipper'
 import { getSettings, getAccounts } from '../store'
 import { getMcJavaVersion, getJavaExe, isJavaReady } from './javaManager'
 import { isWindows } from '../utils/platform'
-import { getInstanceDir } from './instanceManager'
-import { updateLastPlayed } from './instanceManager'
+import { getInstanceDir, updateLastPlayed } from './instanceManager'
 import type { Instance } from './instanceManager'
 
 // Procesos activos de Minecraft: instanceId → ChildProcess

@@ -22,6 +22,7 @@ export interface Instance {
   jvmArgs?: string
   lastPlayed?: number
   source: 'manual' | 'curseforge' | 'modrinth'
+  modSource?: 'cf' | 'mr'
   cfMeta?: {
     modpackId: number
     fileId: number

@@ -81,7 +81,7 @@ export function registerIpcHandlers(): void {
   ipcMain.on('window:close', () => getMainWindow()?.close())
 
   // ── Java ─────────────────────────────────────────────────────────────────────
-  ipcMain.handle('java:getStatus', () => {
+  function getJavaStatusList() {
     const downloads = getJavaDownloads()
     return [8, 17, 21].map((v) => ({
       version: v,
@@ -90,23 +90,16 @@ export function registerIpcHandlers(): void {
       progress: downloads[v]?.progress ?? 0,
       error: downloads[v]?.error ?? '',
     }))
-  })
+  }
+
+  ipcMain.handle('java:getStatus', () => getJavaStatusList())
 
   ipcMain.handle('java:download', async (_, version: number) => {
     downloadJava(version).catch(console.error)
     return { ok: true }
   })
 
-  ipcMain.handle('java:pollStatus', () => {
-    const downloads = getJavaDownloads()
-    return [8, 17, 21].map((v) => ({
-      version: v,
-      ready: isJavaReady(v),
-      status: downloads[v]?.status ?? 'idle',
-      progress: downloads[v]?.progress ?? 0,
-      error: downloads[v]?.error ?? '',
-    }))
-  })
+  ipcMain.handle('java:pollStatus', () => getJavaStatusList())
 
   ipcMain.handle('java:getForMcVersion', (_, mcVersion: string) => {
     // Intentar leer el version.json para obtener javaVersion.majorVersion exacto
@@ -435,13 +428,9 @@ export function registerIpcHandlers(): void {
     const dir = path.join(getInstanceDir(id), folder)
     if (!fs.existsSync(dir)) return []
     return fs.readdirSync(dir)
-      .filter(name => {
-        if (name.startsWith('.')) return false
-        const stat = fs.statSync(path.join(dir, name))
-        if (stat.isDirectory()) return !name.endsWith('.disabled') ? true : true
-        return name.endsWith('.zip') || name.endsWith('.zip.disabled')
-      })
+      .filter(name => !name.startsWith('.'))
       .map(name => ({ name, isDir: fs.statSync(path.join(dir, name)).isDirectory() }))
+      .filter(({ name, isDir }) => isDir || name.endsWith('.zip') || name.endsWith('.zip.disabled'))
   })
 
   ipcMain.handle('instances:deleteFile', (_, id: string, folder: string, filename: string): void => {
