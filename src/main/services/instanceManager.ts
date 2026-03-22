@@ -23,6 +23,8 @@ export interface Instance {
   lastPlayed?: number
   /** origen: 'manual' | 'curseforge' | 'modrinth' */
   source: 'manual' | 'curseforge' | 'modrinth'
+  /** Fuente de catálogo elegida para instancias manuales */
+  modSource?: 'cf' | 'mr'
   /** Metadatos de CurseForge si el origen es 'curseforge' */
   cfMeta?: {
     modpackId: number
@@ -121,6 +123,14 @@ export function cloneInstance(id: string, customName?: string): Instance {
   const clone: Instance = { ...source, id: newId, name: newName, lastPlayed: undefined }
   saveInstance(clone)
   return clone
+}
+
+export function patchInstance(id: string, partial: Partial<Instance>): Instance | null {
+  const inst = getInstance(id)
+  if (!inst) return null
+  const updated = { ...inst, ...partial }
+  saveInstance(updated)
+  return updated
 }
 
 export function updateLastPlayed(id: string): void {

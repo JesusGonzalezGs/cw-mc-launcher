@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { marked } from 'marked'
 import {
   X, Search, Download, RefreshCw, ChevronLeft, ChevronRight,
   Tag, ArrowUpDown, Image, Sparkles, Database,
@@ -128,11 +129,12 @@ function FileCard({ mod, source, installing, installed, error, onInstall, onDeta
 // ── FileDetailView ────────────────────────────────────────────────────────────
 interface FileDetailViewProps {
   mod: any; source: Source; version: string
-  installing: boolean; installed: boolean; installError?: string
+  installingVersionId: string | null; installed: boolean; installError?: string
+  installedVersionId?: string
   Icon: React.ElementType; onInstall: (id: string) => void; onBack: () => void
 }
 
-function FileDetailView({ mod, source, version, installing, installed, installError, Icon, onInstall, onBack }: FileDetailViewProps) {
+function FileDetailView({ mod, source, version, installingVersionId, installed, installError, installedVersionId, Icon, onInstall, onBack }: FileDetailViewProps) {
   const isCf = source === 'cf'
   const [detailTab, setDetailTab] = useState<'desc' | 'versions' | 'screenshots'>('desc')
   const [description, setDescription] = useState('')
@@ -181,7 +183,7 @@ function FileDetailView({ mod, source, version, installing, installed, installEr
     setLoadingDesc(true)
     const descP: Promise<string> = isCf
       ? (window.launcher.cf.getModDescription(mod.id) as Promise<string>)
-      : mrGetProject(mod.project_id).then((p: any) => p.body ?? '')
+      : mrGetProject(mod.project_id).then((p: any) => marked.parse(p.body ?? '') as string)
     descP.then(setDescription).catch(() => {}).finally(() => setLoadingDesc(false))
 
     setLoadingVersions(true)
@@ -234,20 +236,20 @@ function FileDetailView({ mod, source, version, installing, installed, installEr
                 <>
                   <button
                     onClick={() => bestVersion && onInstall(bestVersion.id)}
-                    disabled={installing || (!compatible && !loadingVersions)}
+                    disabled={!!installingVersionId || (!compatible && !loadingVersions)}
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all disabled:cursor-not-allowed ${
                       !compatible && !loadingVersions ? 'border border-gray-700 text-gray-600'
-                      : installing ? 'bg-purple-600/60 text-white/70 cursor-wait'
+                      : installingVersionId ? 'bg-purple-600/60 text-white/70 cursor-wait'
                       : loadingVersions ? 'bg-gray-700/60 text-gray-500 cursor-wait'
                       : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-sm'
                     }`}
                   >
-                    {installing
+                    {installingVersionId === bestVersion?.id
                       ? <span className="w-4 h-4 rounded-full border-2 border-t-transparent border-white animate-spin" />
                       : loadingVersions
                         ? <span className="w-4 h-4 rounded-full border-2 border-t-transparent border-gray-400 animate-spin" />
                         : <Download size={14} />}
-                    {!compatible && !loadingVersions ? 'Sin versión' : installing ? 'Instalando...' : loadingVersions ? 'Cargando...' : 'Instalar'}
+                    {!compatible && !loadingVersions ? 'Sin versión' : installingVersionId === bestVersion?.id ? 'Instalando...' : loadingVersions ? 'Cargando...' : 'Instalar'}
                   </button>
                   {installError && <p className="text-[11px] text-red-400 max-w-[160px] text-right">{installError}</p>}
                 </>
@@ -271,12 +273,8 @@ function FileDetailView({ mod, source, version, installing, installed, installEr
           {detailTab === 'desc' && (
             loadingDesc ? <div className="h-32 rounded-xl animate-pulse bg-gray-700/50" /> :
             description ? (
-              isCf ? (
-                <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40 text-gray-300 text-sm leading-relaxed [&_a]:text-purple-400 [&_a:hover]:text-purple-300 [&_img]:rounded-lg [&_img]:max-w-full [&_h1]:text-white [&_h1]:font-bold [&_h1]:text-base [&_h2]:text-white [&_h2]:font-semibold [&_h3]:text-gray-200 [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-1 [&_p]:mt-2 overflow-hidden"
-                  dangerouslySetInnerHTML={{ __html: description }} />
-              ) : (
-                <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40 text-gray-300 text-sm leading-relaxed overflow-hidden whitespace-pre-wrap">{description}</div>
-              )
+              <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40 text-gray-300 text-sm leading-relaxed [&_a]:text-purple-400 [&_a:hover]:text-purple-300 [&_img]:rounded-lg [&_img]:max-w-full [&_h1]:text-white [&_h1]:font-bold [&_h1]:text-base [&_h2]:text-white [&_h2]:font-semibold [&_h3]:text-gray-200 [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-1 [&_p]:mt-2 overflow-hidden"
+                dangerouslySetInnerHTML={{ __html: description }} />
             ) : <p className="text-sm text-gray-600">Sin descripción disponible.</p>
           )}
           {detailTab === 'versions' && (
@@ -288,8 +286,14 @@ function FileDetailView({ mod, source, version, installing, installed, installEr
                 <div className="space-y-2">{[...Array(5)].map((_, i) => <div key={i} className="h-14 rounded-xl animate-pulse bg-gray-700/50" />)}</div>
               ) : filteredVersions.length === 0 ? <p className="text-sm text-gray-600">No hay versiones para estos filtros.</p> : (
                 <div className="space-y-2">
-                  {pagedVersions.map(ver => (
-                    <div key={ver.id} className="flex items-center justify-between px-4 py-3 rounded-xl border gap-3 bg-gray-800/50 border-purple-500/15 hover:border-purple-500/30 hover:bg-purple-950/10 transition-colors">
+                  {pagedVersions.map(ver => {
+                    const isInstalledVer = !!installedVersionId && installedVersionId === ver.id
+                    return (
+                    <div key={ver.id} className={`flex items-center justify-between px-4 py-3 rounded-xl border gap-3 transition-colors ${
+                      isInstalledVer
+                        ? 'bg-green-950/20 border-green-500/25'
+                        : 'bg-gray-800/50 border-purple-500/15 hover:border-purple-500/30 hover:bg-purple-950/10'
+                    }`}>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate text-gray-200">{ver.name}</p>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -299,15 +303,20 @@ function FileDetailView({ mod, source, version, installing, installed, installEr
                           {ver.date && <span className="text-[10px] text-gray-600">{ver.date}</span>}
                         </div>
                       </div>
-                      <button onClick={() => onInstall(ver.id)} disabled={installing}
-                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-shrink-0 transition-all ${
-                          installing ? 'bg-purple-600/60 text-white/70 cursor-wait' : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-sm'
-                        }`}>
-                        {installing ? <span className="w-3 h-3 rounded-full border-2 border-t-transparent border-white animate-spin" /> : <Download size={10} />}
-                        Instalar
-                      </button>
+                      {isInstalledVer ? (
+                        <span className="text-xs text-green-400 font-medium flex-shrink-0">✓ Instalado</span>
+                      ) : (
+                        <button onClick={() => onInstall(ver.id)} disabled={!!installingVersionId}
+                          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-shrink-0 transition-all ${
+                            installingVersionId === ver.id ? 'bg-purple-600/60 text-white/70 cursor-wait' : !!installingVersionId ? 'bg-gray-700/60 text-gray-500 cursor-not-allowed' : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-sm'
+                          }`}>
+                          {installingVersionId === ver.id ? <span className="w-3 h-3 rounded-full border-2 border-t-transparent border-white animate-spin" /> : <Download size={10} />}
+                          {installingVersionId === ver.id ? 'Instalando...' : 'Instalar'}
+                        </button>
+                      )}
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
               {totalPages > 1 && (
@@ -340,17 +349,33 @@ function FileDetailView({ mod, source, version, installing, installed, installEr
   )
 }
 
+// ── Module-level install tracker (survives modal close/reopen) ────────────────
+// key: `${instanceId}:${folder}:${modKey}` (modKey = String(modId) for CF, slug for MR)
+const _fileInstalls = new Map<string, { modKey: string; versionId: string | null; clearFn?: () => void }>()
+
 // ── Main ──────────────────────────────────────────────────────────────────────
 interface Props {
   instance: Instance
   type: keyof typeof FILE_CLASS
   installedFiles: string[]
+  installedMeta?: Record<string, any>
   defaultSource?: Source
   onClose: () => void
   onInstalled: (filename: string) => void
+  initialMod?: any
 }
 
-export default function FileCatalogModal({ instance, type, installedFiles: _installedFiles, defaultSource, onClose, onInstalled }: Props) {
+function buildInstalledIds(meta: Record<string, any> | undefined): Set<string> {
+  if (!meta) return new Set()
+  const ids = new Set<string>()
+  for (const m of Object.values(meta)) {
+    if (m.mrSlug) ids.add(m.mrSlug)
+    else if ((m.modId ?? 0) > 0) ids.add(String(m.modId))
+  }
+  return ids
+}
+
+export default function FileCatalogModal({ instance, type, installedFiles: _installedFiles, installedMeta, defaultSource, onClose, onInstalled, initialMod }: Props) {
   const { classId, categoryId, label, folder, icon: Icon, mrProjectType } = FILE_CLASS[type]
 
   const [source, setSource] = useState<Source>(defaultSource ?? 'cf')
@@ -364,15 +389,29 @@ export default function FileCatalogModal({ instance, type, installedFiles: _inst
   const [searchError, setSearchError] = useState('')
   const [retryCount, setRetryCount] = useState(0)
   const [installing, setInstalling] = useState<string | null>(null)
+  const [installingVersionId, setInstallingVersionId] = useState<string | null>(null)
   const [installErrors, setInstallErrors] = useState<Record<string, string>>({})
-  const [installedIds, setInstalledIds] = useState(new Set<string>())
-  const [selectedMod, setSelectedMod] = useState<any>(null)
+  const [installedIds, setInstalledIds] = useState(() => buildInstalledIds(installedMeta))
+  const [selectedMod, setSelectedMod] = useState<any>(initialMod ?? null)
   const [mcVersions, setMcVersions] = useState<string[]>([])
   const [cfSortField, setCfSortField] = useState('2')
   const [mrSortBy, setMrSortBy] = useState('downloads')
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // Seed installing state from module-level tracker on mount
+  useEffect(() => {
+    const prefix = `${instance.id}:${folder}:`
+    for (const [key, val] of _fileInstalls) {
+      if (key.startsWith(prefix)) {
+        val.clearFn = () => { setInstalling(null); setInstallingVersionId(null) }
+        setInstalling(val.modKey)
+        setInstallingVersionId(val.versionId)
+        break
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (defaultSource) return
@@ -445,7 +484,9 @@ export default function FileCatalogModal({ instance, type, installedFiles: _inst
 
   async function handleCfInstall(mod: any, fileId: string) {
     const key = String(mod.id)
+    _fileInstalls.set(`${instance.id}:${folder}:${key}`, { modKey: key, versionId: fileId })
     setInstalling(key)
+    setInstallingVersionId(fileId)
     setInstallErrors(prev => { const n = { ...prev }; delete n[key]; return n })
     try {
       const result = await (window.launcher.instances.installFile(instance.id, folder, mod.id, Number(fileId)) as Promise<any>)
@@ -454,22 +495,32 @@ export default function FileCatalogModal({ instance, type, installedFiles: _inst
     } catch (err: any) {
       setInstallErrors(prev => ({ ...prev, [key]: err.message ?? 'Error' }))
     } finally {
+      const mapKey = `${instance.id}:${folder}:${key}`
+      _fileInstalls.get(mapKey)?.clearFn?.()
+      _fileInstalls.delete(mapKey)
       setInstalling(null)
+      setInstallingVersionId(null)
     }
   }
 
   async function handleMrInstall(mod: any, versionId: string) {
-    const key = mod.project_id
+    const key = mod.slug
+    _fileInstalls.set(`${instance.id}:${folder}:${key}`, { modKey: key, versionId })
     setInstalling(key)
+    setInstallingVersionId(versionId)
     setInstallErrors(prev => { const n = { ...prev }; delete n[key]; return n })
     try {
-      const result = await (window.launcher.mr.installVersion(instance.id, versionId, folder) as Promise<any>)
+      const result = await (window.launcher.mr.installVersion(instance.id, versionId, folder, mod.slug) as Promise<any>)
       setInstalledIds(prev => new Set([...prev, key]))
       onInstalled(result.filename)
     } catch (err: any) {
       setInstallErrors(prev => ({ ...prev, [key]: err.message ?? 'Error' }))
     } finally {
+      const mapKey = `${instance.id}:${folder}:${key}`
+      _fileInstalls.get(mapKey)?.clearFn?.()
+      _fileInstalls.delete(mapKey)
       setInstalling(null)
+      setInstallingVersionId(null)
     }
   }
 
@@ -522,9 +573,20 @@ export default function FileCatalogModal({ instance, type, installedFiles: _inst
               source={source}
               version={version}
               Icon={Icon}
-              installing={installing === (isCf ? String(selectedMod.id) : selectedMod.project_id)}
-              installed={isInstalled(isCf ? String(selectedMod.id) : selectedMod.project_id)}
-              installError={installErrors[isCf ? String(selectedMod.id) : selectedMod.project_id]}
+              installingVersionId={installing === (isCf ? String(selectedMod.id) : selectedMod.slug) ? installingVersionId : null}
+              installed={isInstalled(isCf ? String(selectedMod.id) : selectedMod.slug)}
+              installError={installErrors[isCf ? String(selectedMod.id) : selectedMod.slug]}
+              installedVersionId={(() => {
+                if (!installedMeta) return undefined
+                const vals = Object.values(installedMeta) as any[]
+                if (isCf) {
+                  const entry = vals.find(m => m.modId === selectedMod.id)
+                  return entry?.fileId ? String(entry.fileId) : undefined
+                } else {
+                  const entry = vals.find(m => m.mrSlug === selectedMod.slug)
+                  return entry?.mrVersionId
+                }
+              })()}
               onInstall={id => isCf ? handleCfInstall(selectedMod, id) : handleMrInstall(selectedMod, id)}
               onBack={() => setSelectedMod(null)}
             />
@@ -577,7 +639,7 @@ export default function FileCatalogModal({ instance, type, installedFiles: _inst
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                     {mods.map(mod => {
-                      const modKey = isCf ? String(mod.id) : mod.project_id
+                      const modKey = isCf ? String(mod.id) : mod.slug
                       return (
                         <FileCard
                           key={modKey}

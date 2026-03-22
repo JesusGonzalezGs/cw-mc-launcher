@@ -36,6 +36,7 @@ declare global {
         create: (params: any) => Promise<any>
         delete: (id: string) => Promise<any>
         clone: (id: string, customName?: string) => Promise<any>
+        patch: (id: string, partial: Record<string, any>) => Promise<any>
         isRunning: (id: string) => Promise<boolean>
         stop: (id: string) => Promise<any>
         launch: (instance: any) => Promise<any>

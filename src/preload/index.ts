@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+// Increase limit to avoid MaxListenersExceededWarning from HMR / multiple mounts
+ipcRenderer.setMaxListeners(30)
+
+// Per-(callback, channel) listener map — supports same callback on multiple channels
+// key: callback function reference; value: Map<channel, wrappedFn>
+const _listenerMap = new Map<(...args: any[]) => void, Map<string, (...args: any[]) => void>>()
+
 // Canales permitidos para eventos entrantes (main → renderer)
 const ALLOWED_EVENTS = [
   'game:log',
@@ -56,6 +63,7 @@ contextBridge.exposeInMainWorld('launcher', {
     create: (params: any) => ipcRenderer.invoke('instances:create', params),
     delete: (id: string) => ipcRenderer.invoke('instances:delete', id),
     clone: (id: string, customName?: string) => ipcRenderer.invoke('instances:clone', id, customName),
+    patch: (id: string, partial: Record<string, any>) => ipcRenderer.invoke('instances:patch', id, partial),
     isRunning: (id: string) => ipcRenderer.invoke('instances:isRunning', id),
     stop: (id: string) => ipcRenderer.invoke('instances:stop', id),
     launch: (instance: any) => ipcRenderer.invoke('instances:launch', instance),
@@ -164,17 +172,19 @@ contextBridge.exposeInMainWorld('launcher', {
   // ── Eventos de main → renderer ───────────────────────────────────────────────
   on: (channel: string, callback: (...args: any[]) => void) => {
     if (!(ALLOWED_EVENTS as readonly string[]).includes(channel)) return
-    // Store wrapped fn so off() can remove the exact listener that was added
     const wrapped = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => callback(...args)
-    ;(callback as any).__ipcWrapped = wrapped
+    if (!_listenerMap.has(callback)) _listenerMap.set(callback, new Map())
+    _listenerMap.get(callback)!.set(channel, wrapped)
     ipcRenderer.on(channel, wrapped)
   },
   off: (channel: string, callback: (...args: any[]) => void) => {
     if (!(ALLOWED_EVENTS as readonly string[]).includes(channel)) return
-    const wrapped = (callback as any).__ipcWrapped
+    const channelMap = _listenerMap.get(callback)
+    const wrapped = channelMap?.get(channel)
     if (wrapped) {
       ipcRenderer.removeListener(channel, wrapped)
-      delete (callback as any).__ipcWrapped
+      channelMap!.delete(channel)
+      if (channelMap!.size === 0) _listenerMap.delete(callback)
     }
   },
 })

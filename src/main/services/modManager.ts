@@ -16,6 +16,7 @@ export interface ModMeta {
   name: string
   slug: string
   mrSlug?: string
+  mrVersionId?: string
   mrResolved?: boolean
   logo?: string
   summary?: string
@@ -70,6 +71,17 @@ async function installSingle(
   const modsDir = getModsDir(instanceId)
   fs.mkdirSync(modsDir, { recursive: true })
 
+  // Remove previously installed version of the same mod
+  for (const [existingFilename, meta] of Object.entries(modsJson.mods)) {
+    if (meta.modId !== modId) continue
+    const cleanName = existingFilename.replace('.jar.disabled', '.jar')
+    for (const f of [cleanName, cleanName.replace('.jar', '.jar.disabled')]) {
+      try { fs.rmSync(path.join(modsDir, f), { force: true }) } catch {}
+    }
+    delete modsJson.mods[cleanName]
+    delete modsJson.mods[cleanName.replace('.jar', '.jar.disabled')]
+  }
+
   const url = await cfGetDownloadUrl(modId, fileId)
   if (!url) throw new Error('URL de descarga vacía')
 
@@ -79,7 +91,11 @@ async function installSingle(
   onProgress?.(`Descargando ${filename}...`)
   await downloadFile(url, destPath)
 
-  // Metadata (best-effort)
+  // Pre-write minimal metadata immediately so the file watcher doesn't trigger identifyMods
+  modsJson.mods[filename] = { modId, fileId, name: filename.replace(/\.jar$/, ''), slug: '', gameVersions: [], recognized: true }
+  writeModsJson(instanceId, modsJson)
+
+  // Enrich metadata with full info from API (best-effort)
   let name = filename.replace(/\.jar$/, '')
   let gameVersions: string[] = []
   try {
@@ -103,6 +119,7 @@ async function installSingle(
         summary: mod.summary,
         gameVersions,
         deps,
+        recognized: true,
       }
     }
   } catch { /* metadata optional */ }
@@ -121,7 +138,7 @@ export async function installModWithDeps(
   const modsJson = readModsJson(instanceId)
   const loaderType = LOADER_TYPE_MAP[modLoader.toLowerCase()] ?? 0
 
-  const { filename, name } = await installSingle(instanceId, modId, fileId, modsJson, onProgress)
+  const { filename } = await installSingle(instanceId, modId, fileId, modsJson, onProgress)
 
   // Dependency resolution — deps are stored by installSingle from the file metadata
   const requiredDepIds: number[] = modsJson.mods[filename]?.deps ?? []
@@ -166,15 +183,19 @@ export async function identifyMods(
   const modsJson = readModsJson(instanceId)
   const { getInstance } = await import('./instanceManager')
   const instance = getInstance(instanceId)
-  const isModrinth = instance?.source === 'modrinth'
+  const isModrinth = instance?.source === 'modrinth' || instance?.modSource === 'mr'
 
   // Collect files that need identification
   const toIdentify: { filename: string; cleanName: string }[] = []
   for (const filename of allFiles) {
     const cleanName = filename.replace('.jar.disabled', '.jar')
     const existing = modsJson.mods[cleanName] ?? modsJson.mods[filename]
-    if (existing?.recognized === true) continue
+    // Skip if already identified: CF mods have fileId > 0, MR mods have mrVersionId
+    if (existing?.recognized === true && ((existing.fileId ?? 0) > 0 || existing.mrVersionId)) continue
+    // Skip MR mods that were resolved (even if recognized failed)
     if (existing?.mrResolved) continue
+    // Skip mods that failed identification — don't hammer the API
+    if (existing?.recognized === false) continue
     toIdentify.push({ filename, cleanName })
   }
 
@@ -229,6 +250,7 @@ export async function identifyMods(
         name: project?.title ?? cleanName.replace('.jar', ''),
         slug: '',
         mrSlug: project?.slug ?? modsJson.mods[cleanName]?.mrSlug ?? '',
+        mrVersionId: version.id,
         logo: project?.icon_url,
         summary: project?.description,
         gameVersions: version.game_versions ?? [],

@@ -27,16 +27,17 @@ export function InstallProvider({ children }: { children: React.ReactNode }) {
   const [progress, setProgress] = useState<InstallProgress | null>(null)
 
   useEffect(() => {
-    const handleProgress = (p: InstallProgress) => setProgress(p)
+    const handleCfProgress = (p: InstallProgress) => setProgress(p)
+    const handleMrProgress = (p: InstallProgress) => setProgress(p)
     const handleMcProgress = (data: any) => setProgress(data as InstallProgress)
     const handleLoaderProgress = (data: any) => setProgress({ stage: data.msg, percent: data.percent ?? 0, current: 0, total: 0 })
-    window.launcher.on('cf:installProgress', handleProgress)
-    window.launcher.on('mr:installModpack:progress', handleProgress)
+    window.launcher.on('cf:installProgress', handleCfProgress)
+    window.launcher.on('mr:installModpack:progress', handleMrProgress)
     window.launcher.on('mc:downloadProgress', handleMcProgress)
     window.launcher.on('loaders:progress', handleLoaderProgress)
     return () => {
-      window.launcher.off('cf:installProgress', handleProgress)
-      window.launcher.off('mr:installModpack:progress', handleProgress)
+      window.launcher.off('cf:installProgress', handleCfProgress)
+      window.launcher.off('mr:installModpack:progress', handleMrProgress)
       window.launcher.off('mc:downloadProgress', handleMcProgress)
       window.launcher.off('loaders:progress', handleLoaderProgress)
     }

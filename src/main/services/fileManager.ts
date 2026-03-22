@@ -17,6 +17,7 @@ export interface FileMeta {
   name: string
   slug: string
   mrSlug?: string
+  mrVersionId?: string
   logo?: string
   summary?: string
   recognized?: boolean
@@ -65,6 +66,16 @@ export async function installFileWithMeta(
 
   // Store metadata (best-effort)
   const json = readFilesJson(instanceId, folder)
+  // Remove old version with the same modId
+  for (const [existingFilename, meta] of Object.entries(json.files)) {
+    if (meta.modId !== modId || meta.modId === 0) continue
+    const cleanName = existingFilename.replace('.disabled', '')
+    for (const f of [cleanName, cleanName + '.disabled']) {
+      try { fs.rmSync(path.join(dir, f), { force: true }) } catch {}
+    }
+    delete json.files[cleanName]
+    delete json.files[cleanName + '.disabled']
+  }
   try {
     const [modData, fileData] = await Promise.all([
       cfGetMod(modId) as Promise<any>,
@@ -97,26 +108,48 @@ export async function identifyFiles(
 
   const json = readFilesJson(instanceId, folder)
   const instance = getInstance(instanceId)
-  const isModrinth = instance?.source === 'modrinth'
+  const isModrinth = instance?.source === 'modrinth' || instance?.modSource === 'mr'
 
-  const toIdentify: { filename: string; cleanName: string }[] = []
+  // Scan: .zip files + directories (shaderpacks can be dirs)
+  const toIdentify: { filename: string; cleanName: string; isDir: boolean }[] = []
   for (const filename of fs.readdirSync(dir)) {
-    if (!filename.endsWith('.zip') && !filename.endsWith('.zip.disabled')) continue
-    if (!fs.statSync(path.join(dir, filename)).isFile()) continue
+    if (filename.startsWith('.')) continue
+    const fullPath = path.join(dir, filename)
+    const stat = fs.statSync(fullPath)
+    const isDir = stat.isDirectory()
+    if (!isDir && !filename.endsWith('.zip') && !filename.endsWith('.zip.disabled')) continue
     const cleanName = filename.replace('.disabled', '')
     const existing = json.files[cleanName] ?? json.files[filename]
-    if (existing?.recognized !== undefined) continue
-    toIdentify.push({ filename, cleanName })
+    // Skip if already identified (CF: fileId > 0, MR: mrVersionId, or directory)
+    if (existing?.recognized !== undefined && (existing?.mrVersionId || (existing?.fileId ?? 0) > 0 || isDir)) continue
+    // Skip failed identifications — don't retry
+    if (existing?.recognized === false) continue
+    toIdentify.push({ filename, cleanName, isDir })
+  }
+
+  // Directories can't be hash-identified — mark immediately as unrecognized
+  const zipFiles = toIdentify.filter(e => !e.isDir)
+  for (const { filename, cleanName } of toIdentify.filter(e => e.isDir)) {
+    const existing = json.files[cleanName]
+    if (!existing) {
+      json.files[cleanName] = {
+        modId: 0, fileId: 0,
+        name: cleanName,
+        slug: '',
+        recognized: false,
+      }
+    }
+    if (filename !== cleanName) delete json.files[filename]
   }
 
   writeFilesJson(instanceId, folder, json)
-  if (toIdentify.length === 0) return
-  onProgress?.(`Identificando ${toIdentify.length} archivo${toIdentify.length > 1 ? 's' : ''}...`)
+  if (zipFiles.length === 0) return
+  onProgress?.(`Identificando ${zipFiles.length} archivo${zipFiles.length > 1 ? 's' : ''}...`)
 
   if (isModrinth) {
     // ── Modrinth: SHA1 hash lookup ──────────────────────────────────────────
     const withHash: { filename: string; cleanName: string; sha1: string }[] = []
-    for (const entry of toIdentify) {
+    for (const entry of zipFiles) {
       try {
         const buf = fs.readFileSync(path.join(dir, entry.filename))
         withHash.push({ ...entry, sha1: crypto.createHash('sha1').update(buf).digest('hex') })
@@ -153,6 +186,7 @@ export async function identifyFiles(
         name: project?.title ?? cleanName.replace('.zip', ''),
         slug: project?.slug ?? '',
         mrSlug: project?.slug,
+        mrVersionId: version.id,
         logo: project?.icon_url,
         summary: project?.description,
         recognized: true,
@@ -174,7 +208,7 @@ export async function identifyFiles(
   } else {
     // ── CurseForge: fingerprint matching ────────────────────────────────────
     const withFp: { filename: string; cleanName: string; fingerprint: number }[] = []
-    for (const entry of toIdentify) {
+    for (const entry of zipFiles) {
       try {
         const buf = fs.readFileSync(path.join(dir, entry.filename))
         withFp.push({ ...entry, fingerprint: cfFingerprint(buf) })

@@ -29,6 +29,7 @@ import {
   createInstance,
   deleteInstance,
   cloneInstance,
+  patchInstance,
   listMods,
   toggleMod,
   removeMod,
@@ -194,6 +195,8 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('instances:clone', async (_, id: string, customName?: string) => cloneInstance(id, customName))
+
+  ipcMain.handle('instances:patch', (_, id: string, partial: any) => patchInstance(id, partial))
 
   ipcMain.handle('instances:isRunning', (_, id: string) => isInstanceRunning(id))
 
@@ -432,8 +435,13 @@ export function registerIpcHandlers(): void {
     const dir = path.join(getInstanceDir(id), folder)
     if (!fs.existsSync(dir)) return []
     return fs.readdirSync(dir)
-      .filter(name => (name.endsWith('.zip') || name.endsWith('.zip.disabled')) && fs.statSync(path.join(dir, name)).isFile())
-      .map(name => ({ name, isDir: false }))
+      .filter(name => {
+        if (name.startsWith('.')) return false
+        const stat = fs.statSync(path.join(dir, name))
+        if (stat.isDirectory()) return !name.endsWith('.disabled') ? true : true
+        return name.endsWith('.zip') || name.endsWith('.zip.disabled')
+      })
+      .map(name => ({ name, isDir: fs.statSync(path.join(dir, name)).isDirectory() }))
   })
 
   ipcMain.handle('instances:deleteFile', (_, id: string, folder: string, filename: string): void => {

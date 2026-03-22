@@ -40,6 +40,105 @@ const LOADER_BADGE_COLORS: Record<string, string> = {
   neoforge: 'bg-red-500/15 text-red-300 border-red-500/25',
 }
 
+function EmptyListState({ icon: Icon, message, note, onCatalog, catalogLabel = 'Catálogo', onReload }: {
+  icon: React.ElementType
+  message: string
+  note?: string
+  onCatalog?: () => void
+  catalogLabel?: string
+  onReload?: () => void
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-4 text-center py-14">
+      <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-gray-800/60">
+        <Icon size={24} className="text-gray-600" />
+      </div>
+      <div>
+        <p className="text-gray-400 text-sm font-medium">{message}</p>
+        {note && <p className="text-gray-600 text-xs mt-1">{note}</p>}
+      </div>
+      {(onCatalog || onReload) && (
+        <div className="flex items-center gap-2">
+          {onCatalog && (
+            <button
+              onClick={onCatalog}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-300 hover:text-purple-200 bg-purple-500/15 hover:bg-purple-500/25 rounded-xl transition-colors"
+            >
+              <Plus size={11} />
+              {catalogLabel}
+            </button>
+          )}
+          {onReload && (
+            <button
+              onClick={onReload}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-300 border border-gray-700/60 rounded-xl transition-colors"
+            >
+              <RefreshCw size={11} />
+              Recargar
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ResourceRow({ name, displayName, logo, recognized, enabled, isToggling, disabledAny, fallbackIcon: FallbackIcon, onToggle, onDelete, onOpen }: {
+  name: string
+  displayName: string
+  logo?: string
+  recognized?: boolean
+  enabled: boolean
+  isToggling: boolean
+  disabledAny: boolean
+  fallbackIcon: React.ElementType
+  onToggle: () => void
+  onDelete: () => void
+  onOpen?: () => void
+}) {
+  return (
+    <div className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl border transition-all ${!enabled ? 'opacity-55 border-gray-700/30' : 'border-gray-700/40 hover:border-gray-600/60 hover:bg-gray-700/20'}`}>
+      <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center overflow-hidden ${logo ? '' : recognized === false ? 'bg-gray-700/70' : 'bg-purple-500/15'}`}>
+        {logo ? (
+          <img src={logo} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
+        ) : recognized === false ? (
+          <HelpCircle size={15} className="text-gray-500" />
+        ) : (
+          <FallbackIcon size={15} className="text-purple-400 opacity-70" />
+        )}
+      </div>
+      <div
+        className={`flex-1 min-w-0 ${onOpen ? 'cursor-pointer group/name' : ''}`}
+        onClick={onOpen}
+      >
+        <p className="text-sm font-medium truncate text-gray-200 flex items-center gap-1">
+          {displayName}
+          {onOpen && <ExternalLink size={11} className="shrink-0 text-gray-600 opacity-0 group-hover/name:opacity-100 transition-opacity" />}
+        </p>
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <span className="text-[10px] font-mono truncate text-gray-600">{name}</span>
+          {recognized === false && <span className="text-[10px] text-gray-600 shrink-0">· no reconocido</span>}
+        </div>
+      </div>
+      <button
+        onClick={onToggle}
+        disabled={disabledAny}
+        aria-label={enabled ? `Desactivar ${displayName}` : `Activar ${displayName}`}
+        className={`relative shrink-0 w-10 h-5 rounded-full transition-colors duration-200 disabled:cursor-wait ${enabled ? 'bg-green-500 hover:bg-green-400' : 'bg-gray-600 hover:bg-gray-500'}`}
+      >
+        <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200 ${enabled ? 'left-5' : 'left-0.5'} ${isToggling ? 'opacity-60' : ''}`} />
+      </button>
+      <button
+        onClick={onDelete}
+        disabled={disabledAny}
+        className="shrink-0 p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:cursor-wait"
+      >
+        <Trash2 size={14} />
+      </button>
+    </div>
+  )
+}
+
 function SourcePickerModal({ hasCfToken, onConfirm, onClose }: {
   hasCfToken: boolean
   onConfirm: (source: 'cf' | 'mr') => void
@@ -137,8 +236,33 @@ export default function InstanceDetailPage() {
   const logsRef = useRef<HTMLDivElement>(null)
   const identifiedRef = useRef(false)
   const identifyingModsRef = useRef(false)
+  const loadedFoldersRef = useRef<Set<string>>(new Set())
 
   const isModpackInstance = instance?.source === 'modrinth' || instance?.source === 'curseforge'
+
+  const [catalogInitialMod, setCatalogInitialMod] = useState<{ mod: any; source: 'cf' | 'mr'; folder: 'mods' | ResourceTab } | null>(null)
+
+  async function openItemDetail(meta: { modId?: number; slug?: string; mrSlug?: string; recognized?: boolean } | undefined, folder: 'mods' | ResourceTab) {
+    if (!meta || meta.recognized === false) return
+    try {
+      if (meta.mrSlug) {
+        const raw = await window.launcher.mr.getProject(meta.mrSlug)
+        if (!raw) return
+        // getProject returns `id`, but detail views expect `project_id` (search format)
+        const mod = { ...raw, project_id: raw.project_id ?? raw.id }
+        setCatalogInitialMod({ mod, source: 'mr', folder })
+        if (folder === 'mods') setShowCatalog(true)
+        else setShowFileCatalog(folder as ResourceTab)
+      } else if ((meta.modId ?? 0) > 0) {
+        const res = await window.launcher.cf.getMod(meta.modId!)
+        const mod = (res as any)?.data ?? res
+        if (!mod) return
+        setCatalogInitialMod({ mod, source: 'cf', folder })
+        if (folder === 'mods') setShowCatalog(true)
+        else setShowFileCatalog(folder as ResourceTab)
+      }
+    } catch { /* ignore fetch errors */ }
+  }
 
   const openCatalog = (target: 'mods' | ResourceTab) => {
     const needsPicker = !isModpackInstance && !localStorage.getItem(`modSource_${instance?.id}`)
@@ -152,6 +276,7 @@ export default function InstanceDetailPage() {
     if (!instance) return
     localStorage.setItem(`modSource_${instance.id}`, source)
     setModSource(source)
+    window.launcher.instances.patch(instance.id, { modSource: source }).catch(() => {})
     const target = sourcePicker!.target
     setSourcePicker(null)
     if (target === 'mods') setShowCatalog(true)
@@ -161,14 +286,16 @@ export default function InstanceDetailPage() {
 
   const refreshMods = useCallback(async () => {
     if (!id) return null
-    const [files, meta] = await Promise.all([
-      window.launcher.instances.getMods(id) as Promise<string[]>,
-      window.launcher.instances.getModsMeta(id) as Promise<{ mods: Record<string, ModMeta> }>,
-    ])
-    setMods(files)
-    const metaMods = (meta as any).mods ?? {} as Record<string, ModMeta>
-    setModsMeta(metaMods)
-    return { files, metaMods }
+    try {
+      const [files, meta] = await Promise.all([
+        window.launcher.instances.getMods(id) as Promise<string[]>,
+        window.launcher.instances.getModsMeta(id) as Promise<{ mods: Record<string, ModMeta> }>,
+      ])
+      setMods(files)
+      const metaMods = (meta as any).mods ?? {} as Record<string, ModMeta>
+      setModsMeta(metaMods)
+      return { files, metaMods }
+    } catch { return null }
   }, [id])
 
   useEffect(() => {
@@ -271,15 +398,20 @@ export default function InstanceDetailPage() {
     if (tab === 'console' && logsRef.current) logsRef.current.scrollTop = logsRef.current.scrollHeight
   }, [tab])
 
+  // Reset loaded-folders cache when instance changes
+  useEffect(() => { loadedFoldersRef.current = new Set() }, [id])
+
   useEffect(() => {
     if (tab !== 'resources' || resourceTab === 'mods' || !id) return
-    setLoadingResource(true)
     const folder = resourceTab
+    if (loadedFoldersRef.current.has(folder)) return
+    setLoadingResource(true)
     Promise.all([
       window.launcher.instances.listFolder(id, folder),
       window.launcher.instances.getFilesMeta(id, folder),
     ])
       .then(([files, meta]) => {
+        loadedFoldersRef.current.add(folder)
         setResourceFiles(prev => ({ ...prev, [folder]: files }))
         const metaFiles = (meta as any).files ?? {}
         setFilesMeta(prev => ({ ...prev, [folder]: metaFiles }))
@@ -585,11 +717,12 @@ export default function InstanceDetailPage() {
                     </div>
 
                     {/* Search + sort */}
-                    <div className="mx-4 mb-3 shrink-0 flex flex-wrap gap-2.5 p-3 rounded-2xl border bg-gray-800/40 border-gray-700/50">
-                      <div className="relative flex-1 min-w-[160px]">
-                        <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
-                        <input
-                          type="text"
+                    {instance.modLoader !== 'vanilla' && (
+                      <div className="mx-4 mb-3 shrink-0 flex flex-wrap gap-2.5 p-3 rounded-2xl border bg-gray-800/40 border-gray-700/50">
+                        <div className="relative flex-1 min-w-[160px]">
+                          <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                          <input
+                            type="text"
                           value={modSearch}
                           onChange={(e) => setModSearch(e.target.value)}
                           placeholder="Buscar mod..."
@@ -614,6 +747,7 @@ export default function InstanceDetailPage() {
                         ]}
                       />
                     </div>
+                    )}
 
                     {/* Identifying banner */}
                     {identifyingMods && (
@@ -626,82 +760,41 @@ export default function InstanceDetailPage() {
                     {/* Mod list */}
                     <div className="overflow-y-auto px-4 pb-4 custom-scrollbar max-h-[460px] min-h-[140px]">
                       {filteredMods.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center gap-4 text-center py-14">
-                          {mods.length === 0 ? (
-                            <>
-                              <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-gray-800/60">
-                                <Package size={24} className="text-gray-600" />
-                              </div>
-                              <div>
-                                <p className="text-gray-400 text-sm font-medium">Sin mods instalados</p>
-                                <p className="text-gray-600 text-xs mt-1">
-                                  {instance.modLoader === 'vanilla'
-                                    ? 'Vanilla no soporta mods — usa Forge, Fabric u otro loader'
-                                    : 'Añade mods desde el catálogo de CurseForge'}
-                                </p>
-                              </div>
-                              {instance.modLoader !== 'vanilla' && (
-                                <button
-                                  onClick={() => openCatalog('mods')}
-                                  className="flex items-center gap-2 px-4 py-2 bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 rounded-xl text-sm font-medium transition-colors"
-                                >
-                                  <Plus size={14} />
-                                  Explorar mods
-                                </button>
-                              )}
-                            </>
-                          ) : (
-                            <>
-                              <Search size={20} className="text-gray-600" />
-                              <p className="text-gray-500 text-sm">Sin resultados para "{modSearch}"</p>
-                            </>
-                          )}
-                        </div>
+                        mods.length === 0 ? (
+                          <EmptyListState
+                            icon={Package}
+                            message="Sin mods instalados"
+                            note={instance.modLoader === 'vanilla' ? 'Vanilla no soporta mods — usa Forge, Fabric u otro loader' : 'Añade mods desde el catálogo'}
+                            onCatalog={instance.modLoader !== 'vanilla' ? () => openCatalog('mods') : undefined}
+                            catalogLabel="Explorar mods"
+                          />
+                        ) : (
+                          <div className="flex flex-col items-center justify-center gap-4 text-center py-14">
+                            <Search size={20} className="text-gray-600" />
+                            <p className="text-gray-500 text-sm">Sin resultados para "{modSearch}"</p>
+                          </div>
+                        )
                       ) : (
                         <div className="flex flex-col gap-1">
                           {filteredMods.map((filename) => {
                             const enabled = !filename.endsWith('.jar.disabled')
                             const cleanName = filename.replace('.jar.disabled', '.jar')
                             const meta = modsMeta[cleanName] ?? modsMeta[filename]
-                            const displayName = meta?.name ?? cleanName.replace('.jar', '')
-                            const isToggling = togglingMod === filename
                             return (
-                              <div
+                              <ResourceRow
                                 key={filename}
-                                className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl border transition-all ${!enabled ? 'opacity-55 border-gray-700/30' : 'border-gray-700/40 hover:border-gray-600/60 hover:bg-gray-700/20'}`}
-                              >
-                                <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center overflow-hidden ${meta?.logo ? '' : meta?.recognized === false ? 'bg-gray-700/70' : 'bg-purple-500/15'}`}>
-                                  {meta?.logo ? (
-                                    <img src={meta.logo} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-                                  ) : meta?.recognized === false ? (
-                                    <HelpCircle size={15} className="text-gray-500" />
-                                  ) : (
-                                    <Package size={15} className="text-purple-400 opacity-70" />
-                                  )}
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-medium truncate text-gray-200">{displayName}</p>
-                                  <div className="flex items-center gap-1.5 mt-0.5">
-                                    <span className="text-[10px] font-mono truncate text-gray-600">{cleanName.replace('.jar', '')}</span>
-                                    {meta?.recognized === false && <span className="text-[10px] text-gray-600 shrink-0">· no reconocido</span>}
-                                  </div>
-                                </div>
-                                <button
-                                  onClick={() => handleToggleMod(filename)}
-                                  disabled={!!togglingMod}
-                                  aria-label={enabled ? `Desactivar ${displayName}` : `Activar ${displayName}`}
-                                  className={`relative shrink-0 w-10 h-5 rounded-full transition-colors duration-200 disabled:cursor-wait ${enabled ? 'bg-green-500 hover:bg-green-400' : 'bg-gray-600 hover:bg-gray-500'}`}
-                                >
-                                  <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200 ${enabled ? 'left-5' : 'left-0.5'} ${isToggling ? 'opacity-60' : ''}`} />
-                                </button>
-                                <button
-                                  onClick={() => setModToDelete(filename)}
-                                  disabled={!!togglingMod}
-                                  className="shrink-0 p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:cursor-wait"
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
+                                name={cleanName.replace('.jar', '')}
+                                displayName={meta?.name ?? cleanName.replace('.jar', '')}
+                                logo={meta?.logo}
+                                recognized={meta?.recognized}
+                                enabled={enabled}
+                                isToggling={togglingMod === filename}
+                                disabledAny={!!togglingMod}
+                                fallbackIcon={Package}
+                                onToggle={() => handleToggleMod(filename)}
+                                onDelete={() => setModToDelete(filename)}
+                                onOpen={(meta?.mrSlug || (meta?.modId ?? 0) > 0) ? () => openItemDetail(meta, 'mods') : undefined}
+                              />
                             )
                           })}
                         </div>
@@ -771,85 +864,35 @@ export default function InstanceDetailPage() {
                             {[...Array(4)].map((_, i) => <div key={i} className="h-10 rounded-xl animate-pulse bg-gray-700/40" />)}
                           </div>
                         ) : files.length === 0 ? (
-                          <div className="flex flex-col items-center justify-center gap-3 text-center py-14">
-                            <div className="w-14 h-14 rounded-2xl flex items-center justify-center bg-gray-800/60">
-                              <Icon size={22} className="text-gray-600" />
-                            </div>
-                            <div>
-                              <p className="text-gray-400 text-sm font-medium">{emptyMsg}</p>
-                              <p className="text-gray-600 text-xs mt-1">
-                                {instance.modLoader === 'vanilla'
-                                  ? 'Vanilla no soporta recursos del catálogo — usa Forge, Fabric u otro loader'
-                                  : note}
-                              </p>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              {instance.modLoader !== 'vanilla' && (
-                                <button
-                                  onClick={() => openCatalog(resourceTab)}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-300 hover:text-purple-200 bg-purple-500/15 hover:bg-purple-500/25 rounded-xl transition-colors"
-                                >
-                                  <Plus size={11} />
-                                  Catálogo
-                                </button>
-                              )}
-                              <button
-                                onClick={() => window.launcher.instances.listFolder(id!, resourceTab)
-                                  .then(entries => setResourceFiles(prev => ({ ...prev, [resourceTab]: entries })))}
-                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-500 hover:text-gray-300 border border-gray-700/60 rounded-xl transition-colors"
-                              >
-                                <RefreshCw size={11} />
-                                Recargar
-                              </button>
-                            </div>
-                          </div>
+                          <EmptyListState
+                            icon={Icon}
+                            message={emptyMsg}
+                            note={instance.modLoader === 'vanilla' ? 'Vanilla no soporta recursos del catálogo — usa Forge, Fabric u otro loader' : note}
+                            onCatalog={instance.modLoader !== 'vanilla' ? () => openCatalog(resourceTab) : undefined}
+                            onReload={instance.modLoader !== 'vanilla' ? () => window.launcher.instances.listFolder(id!, resourceTab).then(entries => setResourceFiles(prev => ({ ...prev, [resourceTab]: entries }))) : undefined}
+                          />
                         ) : (
                           <div className="flex flex-col gap-1 py-1">
                             {files.map(entry => {
                               const isDisabled = entry.name.endsWith('.disabled')
                               const rawName = isDisabled ? entry.name.slice(0, -'.disabled'.length) : entry.name
                               const meta = filesMeta[resourceTab]?.[rawName] ?? filesMeta[resourceTab]?.[entry.name]
-                              const displayName = meta?.name ?? rawName.replace(/\.zip$/, '')
-                              const isToggling = togglingFile === entry.name
                               return (
-                                <div
+                                <ResourceRow
                                   key={entry.name}
-                                  className={`flex items-center gap-2.5 px-2.5 py-2.5 rounded-xl border transition-all ${isDisabled ? 'opacity-55 border-gray-700/30' : 'border-gray-700/40 hover:border-gray-600/60 hover:bg-gray-700/20'}`}
-                                >
-                                  <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center overflow-hidden ${meta?.logo ? '' : meta?.recognized === false ? 'bg-gray-700/70' : 'bg-purple-500/15'}`}>
-                                    {meta?.logo ? (
-                                      <img src={meta.logo} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-                                    ) : meta?.recognized === false ? (
-                                      <HelpCircle size={14} className="text-gray-500" />
-                                    ) : (
-                                      <Icon size={14} className="text-purple-400 opacity-70" />
-                                    )}
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium truncate text-gray-200">{displayName}</p>
-                                    <div className="flex items-center gap-1.5 mt-0.5">
-                                      <span className="text-[10px] font-mono truncate text-gray-600">{rawName}</span>
-                                      {meta?.recognized === false && <span className="text-[10px] text-gray-600 shrink-0">· no reconocido</span>}
-                                    </div>
-                                  </div>
-                                  <button
-                                    onClick={() => handleToggleFile(entry)}
-                                    disabled={!!togglingFile}
-                                    aria-label={isDisabled ? `Activar ${displayName}` : `Desactivar ${displayName}`}
-                                    className={`relative shrink-0 w-10 h-5 rounded-full transition-colors duration-200 disabled:cursor-wait ${isDisabled ? 'bg-gray-600 hover:bg-gray-500' : 'bg-green-500 hover:bg-green-400'}`}
-                                  >
-                                    <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-all duration-200 ${isDisabled ? 'left-0.5' : 'left-5'} ${isToggling ? 'opacity-60' : ''}`} />
-                                  </button>
-                                  <button
-                                    onClick={() => window.launcher.instances.deleteFile(id!, resourceTab, entry.name)
-                                      .then(() => setResourceFiles(prev => ({ ...prev, [resourceTab]: prev[resourceTab].filter(f => f.name !== entry.name) })))}
-                                    disabled={!!togglingFile}
-                                    className="shrink-0 p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-500/10 transition-colors disabled:cursor-wait"
-                                    title="Eliminar"
-                                  >
-                                    <Trash2 size={14} />
-                                  </button>
-                                </div>
+                                  name={rawName}
+                                  displayName={meta?.name ?? rawName.replace(/\.zip$/, '')}
+                                  logo={meta?.logo}
+                                  recognized={meta?.recognized}
+                                  enabled={!isDisabled}
+                                  isToggling={togglingFile === entry.name}
+                                  disabledAny={!!togglingFile}
+                                  fallbackIcon={Icon}
+                                  onToggle={() => handleToggleFile(entry)}
+                                  onOpen={(meta?.mrSlug || (meta?.modId ?? 0) > 0) ? () => openItemDetail(meta, resourceTab) : undefined}
+                                  onDelete={() => window.launcher.instances.deleteFile(id!, resourceTab, entry.name)
+                                    .then(() => setResourceFiles(prev => ({ ...prev, [resourceTab]: prev[resourceTab].filter(f => f.name !== entry.name) })))}
+                                />
                               )
                             })}
                           </div>
@@ -1164,11 +1207,13 @@ export default function InstanceDetailPage() {
       {showCatalog && (
         <ModCatalogModal
           instance={instance}
-          onClose={() => setShowCatalog(false)}
+          onClose={() => { setShowCatalog(false); setCatalogInitialMod(null) }}
           onModInstalled={refreshMods}
           installedModIds={installedModIds}
           installedMrSlugs={installedMrSlugs}
-          defaultSource={modSource}
+          modsMeta={modsMeta}
+          defaultSource={catalogInitialMod?.source ?? modSource}
+          initialMod={catalogInitialMod?.mod}
         />
       )}
 
@@ -1190,13 +1235,24 @@ export default function InstanceDetailPage() {
           instance={instance}
           type={showFileCatalog}
           installedFiles={(resourceFiles[showFileCatalog] ?? []).map(e => e.name)}
-          defaultSource={modSource}
-          onClose={() => setShowFileCatalog(null)}
+          installedMeta={filesMeta[showFileCatalog]}
+          defaultSource={catalogInitialMod?.source ?? modSource}
+          initialMod={catalogInitialMod?.mod}
+          onClose={() => { setShowFileCatalog(null); setCatalogInitialMod(null) }}
           onInstalled={(filename) => {
+            const folder = showFileCatalog!
+            loadedFoldersRef.current.delete(folder)
             setResourceFiles(prev => ({
               ...prev,
-              [showFileCatalog]: [...(prev[showFileCatalog] ?? []), { name: filename, isDir: false }],
+              [folder]: [...(prev[folder] ?? []), { name: filename, isDir: false }],
             }))
+            window.launcher.instances.getFilesMeta(id!, folder)
+              .then(meta => {
+                const files = (meta as any).files ?? {}
+                setFilesMeta(prev => ({ ...prev, [folder]: files }))
+                loadedFoldersRef.current.add(folder)
+              })
+              .catch(() => {})
           }}
         />
       )}

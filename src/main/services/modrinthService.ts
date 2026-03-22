@@ -121,25 +121,73 @@ async function _mrInstallVersionInternal(
   const dest = path.join(targetDir, primaryFile.filename)
   await downloadFile(primaryFile.url, dest)
 
+  // Pre-write minimal metadata immediately so the file watcher doesn't trigger identifyMods.
+  // Do NOT include mrSlug here — the cleanup loop below matches by mrSlug and would delete
+  // the just-downloaded file if it found its own entry.
   if (mrSlug && folder === 'mods') {
-    const { readModsJson, writeModsJson } = await import('./modManager')
-    const modsJson = readModsJson(instanceId)
-    const existingEntry = Object.values(modsJson.mods).find(m => m.mrSlug === mrSlug)
-    if (!existingEntry) {
-      let projectTitle = mrSlug
-      try {
-        const project = await mrGetProject(version.project_id)
-        projectTitle = project.title ?? mrSlug
-      } catch {}
+    const { readModsJson: rMJ, writeModsJson: wMJ } = await import('./modManager')
+    const preJson = rMJ(instanceId)
+    if (!preJson.mods[primaryFile.filename]) {
+      preJson.mods[primaryFile.filename] = {
+        modId: 0, fileId: 0, name: mrSlug, slug: '',
+        mrVersionId: version.id, gameVersions: version.game_versions ?? [],
+        recognized: true, mrResolved: true,
+      }
+      wMJ(instanceId, preJson)
+    }
+  }
+
+  if (mrSlug) {
+    let projectTitle = mrSlug
+    let logo: string | undefined
+    let summary: string | undefined
+    try {
+      const project = await mrGetProject(version.project_id)
+      projectTitle = project.title ?? mrSlug
+      logo = project.icon_url
+      summary = project.description
+    } catch {}
+
+    if (folder === 'mods') {
+      const { readModsJson, writeModsJson } = await import('./modManager')
+      const modsJson = readModsJson(instanceId)
+      // Remove old version with the same mrSlug
+      for (const [existingFilename, meta] of Object.entries(modsJson.mods)) {
+        if (meta.mrSlug !== mrSlug) continue
+        const cleanName = existingFilename.replace('.jar.disabled', '.jar')
+        for (const f of [cleanName, cleanName.replace('.jar', '.jar.disabled')]) {
+          try { fs.rmSync(path.join(targetDir, f), { force: true }) } catch {}
+        }
+        delete modsJson.mods[cleanName]
+        delete modsJson.mods[cleanName.replace('.jar', '.jar.disabled')]
+      }
       modsJson.mods[primaryFile.filename] = {
-        modId: 0,
-        fileId: 0,
-        name: projectTitle,
-        slug: '',
-        mrSlug,
+        modId: 0, fileId: 0,
+        name: projectTitle, slug: '', mrSlug, mrVersionId: version.id, logo, summary,
         gameVersions: version.game_versions ?? [],
+        recognized: true,
+        mrResolved: true,
       }
       writeModsJson(instanceId, modsJson)
+    } else {
+      const { readFilesJson, writeFilesJson } = await import('./fileManager')
+      const filesJson = readFilesJson(instanceId, folder)
+      // Remove old version with the same mrSlug
+      for (const [existingFilename, meta] of Object.entries(filesJson.files)) {
+        if ((meta as any).mrSlug !== mrSlug) continue
+        const cleanName = existingFilename.replace('.disabled', '')
+        for (const f of [cleanName, cleanName + '.disabled']) {
+          try { fs.rmSync(path.join(targetDir, f), { force: true }) } catch {}
+        }
+        delete filesJson.files[cleanName]
+        delete filesJson.files[cleanName + '.disabled']
+      }
+      filesJson.files[primaryFile.filename] = {
+        modId: 0, fileId: 0,
+        name: projectTitle, slug: '', mrSlug, mrVersionId: version.id, logo, summary,
+        recognized: true,
+      }
+      writeFilesJson(instanceId, folder, filesJson)
     }
   }
 

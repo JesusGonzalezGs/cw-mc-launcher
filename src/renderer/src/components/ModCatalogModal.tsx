@@ -263,9 +263,10 @@ interface DepsNotice {
 interface ModDetailViewProps {
   mod: any
   source: Source
-  installing: boolean
+  installingVersionId: string | null
   installed: boolean
   installError?: string
+  installedVersionId?: string
   onInstall: (id: string) => void
   onBack: () => void
   version: string
@@ -274,7 +275,7 @@ interface ModDetailViewProps {
   onClearDeps?: () => void
 }
 
-function ModDetailView({ mod, source, installing, installed, installError, onInstall, onBack, version, loader, depsNotice, onClearDeps }: ModDetailViewProps) {
+function ModDetailView({ mod, source, installingVersionId, installed, installError, installedVersionId, onInstall, onBack, version, loader, depsNotice, onClearDeps }: ModDetailViewProps) {
   const isCf = source === 'cf'
   const [detailTab, setDetailTab] = useState<'desc' | 'versions' | 'screenshots'>('desc')
   const [description, setDescription] = useState('')
@@ -405,20 +406,20 @@ function ModDetailView({ mod, source, installing, installed, installError, onIns
                 <>
                   <button
                     onClick={() => bestVersion && onInstall(bestVersion.id)}
-                    disabled={installing || (!compatible && !loadingVersions)}
+                    disabled={!!installingVersionId || (!compatible && !loadingVersions)}
                     className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all disabled:cursor-not-allowed ${
                       !compatible && !loadingVersions ? 'border border-gray-700 text-gray-600'
-                      : installing ? 'bg-purple-600/60 text-white/70 cursor-wait'
+                      : installingVersionId ? 'bg-purple-600/60 text-white/70 cursor-wait'
                       : loadingVersions ? 'bg-gray-700/60 text-gray-500 cursor-wait'
                       : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-sm'
                     }`}
                   >
-                    {installing
+                    {installingVersionId === bestVersion?.id
                       ? <span className="w-4 h-4 rounded-full border-2 border-t-transparent border-white animate-spin" />
                       : loadingVersions
                         ? <span className="w-4 h-4 rounded-full border-2 border-t-transparent border-gray-400 animate-spin" />
                         : <Download size={14} />}
-                    {!compatible && !loadingVersions ? 'Sin versión' : installing ? 'Instalando...' : loadingVersions ? 'Cargando...' : 'Instalar'}
+                    {!compatible && !loadingVersions ? 'Sin versión' : installingVersionId === bestVersion?.id ? 'Instalando...' : loadingVersions ? 'Cargando...' : 'Instalar'}
                   </button>
                   {installError && <p className="text-[11px] text-red-400 max-w-[160px] text-right">{installError}</p>}
                 </>
@@ -453,8 +454,14 @@ function ModDetailView({ mod, source, installing, installed, installError, onIns
               : filteredVersions.length === 0 ? <p className="text-sm text-gray-600">No hay versiones para estos filtros.</p>
               : (
                 <div className="space-y-2">
-                  {pagedVersions.map(ver => (
-                    <div key={ver.id} className="flex items-center justify-between px-4 py-3 rounded-xl border gap-3 bg-gray-800/50 border-purple-500/15 hover:border-purple-500/30 hover:bg-purple-950/10 transition-colors">
+                  {pagedVersions.map(ver => {
+                    const isInstalledVer = !!installedVersionId && installedVersionId === ver.id
+                    return (
+                    <div key={ver.id} className={`flex items-center justify-between px-4 py-3 rounded-xl border gap-3 transition-colors ${
+                      isInstalledVer
+                        ? 'bg-green-950/20 border-green-500/25'
+                        : 'bg-gray-800/50 border-purple-500/15 hover:border-purple-500/30 hover:bg-purple-950/10'
+                    }`}>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate text-gray-200">{ver.name}</p>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
@@ -467,18 +474,23 @@ function ModDetailView({ mod, source, installing, installed, installError, onIns
                           {ver.date && <span className="text-[10px] text-gray-600">{ver.date}</span>}
                         </div>
                       </div>
-                      <button
-                        onClick={() => onInstall(ver.id)}
-                        disabled={installing}
-                        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-shrink-0 transition-all ${
-                          installing ? 'bg-purple-600/60 text-white/70 cursor-wait' : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-sm'
-                        }`}
-                      >
-                        {installing ? <span className="w-3 h-3 rounded-full border-2 border-t-transparent border-white animate-spin" /> : <Download size={10} />}
-                        Instalar
-                      </button>
+                      {isInstalledVer ? (
+                        <span className="text-xs text-green-400 font-medium flex-shrink-0">✓ Instalado</span>
+                      ) : (
+                        <button
+                          onClick={() => onInstall(ver.id)}
+                          disabled={!!installingVersionId}
+                          className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium flex-shrink-0 transition-all ${
+                            installingVersionId === ver.id ? 'bg-purple-600/60 text-white/70 cursor-wait' : !!installingVersionId ? 'bg-gray-700/60 text-gray-500 cursor-not-allowed' : 'bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-sm'
+                          }`}
+                        >
+                          {installingVersionId === ver.id ? <span className="w-3 h-3 rounded-full border-2 border-t-transparent border-white animate-spin" /> : <Download size={10} />}
+                          {installingVersionId === ver.id ? 'Instalando...' : 'Instalar'}
+                        </button>
+                      )}
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
               )}
               {totalPages > 1 && (
@@ -511,6 +523,10 @@ function ModDetailView({ mod, source, installing, installed, installError, onIns
   )
 }
 
+// ── Module-level install tracker (survives modal close/reopen) ────────────────
+// key: `${instanceId}:${modKey}` (modKey = String(modId) for CF, mrSlug for MR)
+const _modInstalls = new Map<string, { id: string | number; versionId?: string; clearFn?: () => void }>()
+
 // ── Main ModCatalogModal ───────────────────────────────────────────────────────
 interface Props {
   instance: Instance
@@ -518,12 +534,14 @@ interface Props {
   onModInstalled: () => void
   installedModIds?: Set<number>
   installedMrSlugs?: Set<string>
+  modsMeta?: Record<string, any>
   defaultSource?: Source
+  initialMod?: any
 }
 
 type Source = 'cf' | 'mr'
 
-export default function ModCatalogModal({ instance, onClose, onModInstalled, installedModIds: parentInstalledIds, installedMrSlugs: parentInstalledMrSlugs, defaultSource = 'cf' }: Props) {
+export default function ModCatalogModal({ instance, onClose, onModInstalled, installedModIds: parentInstalledIds, installedMrSlugs: parentInstalledMrSlugs, modsMeta, defaultSource = 'cf', initialMod }: Props) {
   const [source, setSource] = useState<Source>(defaultSource)
   const [search, setSearch] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
@@ -544,15 +562,30 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
   const [installErrors, setInstallErrors] = useState<Record<string | number, string>>({})
   const [installedIds, setInstalledIds] = useState(new Set<number>())
   const [installedMrSlugs, setInstalledMrSlugs] = useState(new Set<string>())
-  const [selectedMod, setSelectedMod] = useState<any>(null)
+  const [selectedMod, setSelectedMod] = useState<any>(initialMod ?? null)
   const [depsNotice, setDepsNotice] = useState<DepsNotice | null>(null)
   const [searchError, setSearchError] = useState('')
   const [retryCount, setRetryCount] = useState(0)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const prevSourceRef = useRef(source)
+
+  // Seed installing state from module-level tracker on mount
+  useEffect(() => {
+    const prefix = `${instance.id}:`
+    for (const [key, val] of _modInstalls) {
+      if (key.startsWith(prefix)) {
+        val.clearFn = () => setInstalling(null)
+        setInstalling(val)
+        break
+      }
+    }
+  }, [])
 
   // Reset on source change
   useEffect(() => {
+    if (prevSourceRef.current === source) return
+    prevSourceRef.current = source
     setPage(0)
     setMods([])
     setSelectedMod(null)
@@ -638,7 +671,9 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
   // CF install
   const installCfMod = async (mod: any, fileId: number) => {
     if (!fileId) return
-    setInstalling({ id: mod.id })
+    const val = { id: mod.id, versionId: String(fileId) }
+    _modInstalls.set(`${instance.id}:${mod.id}`, val)
+    setInstalling(val)
     setInstallErrors(prev => { const n = { ...prev }; delete n[mod.id]; return n })
     setDepsNotice(null)
     try {
@@ -651,13 +686,18 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
     } catch (err: any) {
       setInstallErrors(prev => ({ ...prev, [mod.id]: err.message ?? 'Error desconocido' }))
     } finally {
+      const entry = _modInstalls.get(`${instance.id}:${mod.id}`)
+      entry?.clearFn?.()
+      _modInstalls.delete(`${instance.id}:${mod.id}`)
       setInstalling(null)
     }
   }
 
   // MR install (from detail view — versionId known)
   const installMrMod = async (mod: any, versionId: string) => {
-    setInstalling({ id: mod.project_id, versionId })
+    const val = { id: mod.project_id, versionId }
+    _modInstalls.set(`${instance.id}:${mod.slug}`, val)
+    setInstalling(val)
     setInstallErrors(prev => { const n = { ...prev }; delete n[mod.project_id]; return n })
     setDepsNotice(null)
     try {
@@ -673,19 +713,25 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
     } catch (err: any) {
       setInstallErrors(prev => ({ ...prev, [mod.project_id]: err.message ?? 'Error desconocido' }))
     } finally {
+      const entry = _modInstalls.get(`${instance.id}:${mod.slug}`)
+      entry?.clearFn?.()
+      _modInstalls.delete(`${instance.id}:${mod.slug}`)
       setInstalling(null)
     }
   }
 
   // MR install (from card — pick best version first)
   const installMrModDirect = async (mod: any) => {
-    setInstalling({ id: mod.project_id })
+    const val = { id: mod.project_id }
+    _modInstalls.set(`${instance.id}:${mod.slug}`, val)
+    setInstalling(val)
     setInstallErrors(prev => { const n = { ...prev }; delete n[mod.project_id]; return n })
     setDepsNotice(null)
     try {
       const vers = await mrGetProjectVersions(mod.project_id) as any[]
       const best = pickBestNormVersion(vers.map(mrVerToNormVersion), version, loader, 'mr')
       if (!best) throw new Error('No hay versión compatible')
+      _modInstalls.set(`${instance.id}:${mod.slug}`, { ...val, versionId: best.id })
       const result = await (window.launcher.mr.installVersion(instance.id, best.id, 'mods', mod.slug) as Promise<any>)
       setInstalledMrSlugs(prev => new Set([...prev, mod.slug]))
       if ((result.depsInstalled?.length ?? 0) > 0 || (result.depsFailed?.length ?? 0) > 0) {
@@ -698,6 +744,9 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
     } catch (err: any) {
       setInstallErrors(prev => ({ ...prev, [mod.project_id]: err.message ?? 'Error desconocido' }))
     } finally {
+      const entry = _modInstalls.get(`${instance.id}:${mod.slug}`)
+      entry?.clearFn?.()
+      _modInstalls.delete(`${instance.id}:${mod.slug}`)
       setInstalling(null)
     }
   }
@@ -738,9 +787,23 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
             <ModDetailView
               mod={selectedMod}
               source={source}
-              installing={source === 'cf' ? installing?.id === selectedMod.id : installing?.id === selectedMod.project_id}
+              installingVersionId={(() => {
+                const isThisMod = source === 'cf' ? installing?.id === selectedMod.id : installing?.id === selectedMod.project_id
+                return isThisMod ? (installing?.versionId ?? null) : null
+              })()}
               installed={source === 'cf' ? isCfInstalled(selectedMod.id) : isMrInstalled(selectedMod.slug)}
               installError={source === 'cf' ? installErrors[selectedMod.id] : installErrors[selectedMod.project_id]}
+              installedVersionId={(() => {
+                if (!modsMeta) return undefined
+                const vals = Object.values(modsMeta) as any[]
+                if (source === 'cf') {
+                  const entry = vals.find(m => m.modId === selectedMod.id)
+                  return entry?.fileId ? String(entry.fileId) : undefined
+                } else {
+                  const entry = vals.find(m => m.mrSlug === selectedMod.slug)
+                  return entry?.mrVersionId
+                }
+              })()}
               onInstall={id => source === 'cf' ? installCfMod(selectedMod, Number(id)) : installMrMod(selectedMod, id)}
               onBack={() => setSelectedMod(null)}
               version={version}
