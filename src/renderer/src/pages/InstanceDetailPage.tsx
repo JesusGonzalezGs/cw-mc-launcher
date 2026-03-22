@@ -40,6 +40,69 @@ const LOADER_BADGE_COLORS: Record<string, string> = {
   neoforge: 'bg-red-500/15 text-red-300 border-red-500/25',
 }
 
+function SourcePickerModal({ hasCfToken, onConfirm, onClose }: {
+  hasCfToken: boolean
+  onConfirm: (source: 'cf' | 'mr') => void
+  onClose: () => void
+}) {
+  const defaultSource = hasCfToken ? 'cf' : 'mr'
+  const [selected, setSelected] = useState<'cf' | 'mr'>(defaultSource)
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" onClick={onClose} />
+      <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none">
+        <div className="pointer-events-auto bg-gray-900 border border-gray-700/60 rounded-2xl p-6 w-84 shadow-2xl">
+          <h2 className="text-base font-semibold text-white mb-1">¿Dónde buscar?</h2>
+          <p className="text-xs text-gray-500 mb-4">Elige el repositorio para esta instancia. Puedes cambiarlo más tarde desde el catálogo.</p>
+          <div className="flex flex-col gap-2.5 mb-5">
+            {hasCfToken && (
+              <button
+                onClick={() => setSelected('cf')}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all text-left ${selected === 'cf' ? 'bg-orange-500/15 border-orange-500/50 ring-1 ring-orange-500/40' : 'bg-gray-800/40 border-gray-700/40 hover:border-orange-500/30 hover:bg-orange-500/5'}`}
+              >
+                <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${selected === 'cf' ? 'border-orange-400' : 'border-gray-600'}`}>
+                  {selected === 'cf' && <div className="w-2 h-2 rounded-full bg-orange-400" />}
+                </div>
+                <img src="https://www.curseforge.com/favicon.ico" className="w-5 h-5 rounded" onError={e => (e.currentTarget.style.display = 'none')} />
+                <div>
+                  <p className="text-sm font-medium text-orange-300">CurseForge</p>
+                  <p className="text-xs text-gray-500">Mayor catálogo de mods</p>
+                </div>
+              </button>
+            )}
+            <button
+              onClick={() => setSelected('mr')}
+              className={`flex items-center gap-3 px-4 py-3 rounded-xl border transition-all text-left ${selected === 'mr' ? 'bg-green-500/15 border-green-500/50 ring-1 ring-green-500/40' : 'bg-gray-800/40 border-gray-700/40 hover:border-green-500/30 hover:bg-green-500/5'}`}
+            >
+              <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 ${selected === 'mr' ? 'border-green-400' : 'border-gray-600'}`}>
+                {selected === 'mr' && <div className="w-2 h-2 rounded-full bg-green-400" />}
+              </div>
+              <img src="https://modrinth.com/favicon.ico" className="w-5 h-5 rounded" onError={e => (e.currentTarget.style.display = 'none')} />
+              <div>
+                <p className="text-sm font-medium text-green-300">Modrinth</p>
+                <p className="text-xs text-gray-500">Open source, sin API key</p>
+              </div>
+            </button>
+            {!hasCfToken && (
+              <p className="text-xs text-gray-600 text-center">CurseForge no disponible (sin API key configurada)</p>
+            )}
+          </div>
+          <div className="flex gap-2 justify-end">
+            <button onClick={onClose} className="px-3 py-1.5 rounded-lg text-xs text-gray-400 hover:text-gray-200 transition-colors">Cancelar</button>
+            <button
+              onClick={() => onConfirm(selected)}
+              className="px-4 py-1.5 rounded-lg text-xs font-medium bg-purple-600 hover:bg-purple-500 text-white transition-colors"
+            >
+              Continuar
+            </button>
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
 export default function InstanceDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -63,6 +126,8 @@ export default function InstanceDetailPage() {
   const [togglingFile, setTogglingFile] = useState<string | null>(null)
   const [crashReport, setCrashReport] = useState<string | null>(null)
   const [modSource, setModSource] = useState<'cf' | 'mr'>('cf')
+  const [hasCfToken, setHasCfToken] = useState(true)
+  const [sourcePicker, setSourcePicker] = useState<{ target: 'mods' | ResourceTab } | null>(null)
   const [modSort, setModSort] = useState<'default' | 'name' | 'name-desc' | 'enabled' | 'disabled'>('default')
   const [modSearch, setModSearch] = useState('')
   const [jvmSaved, setJvmSaved] = useState(false)
@@ -72,6 +137,27 @@ export default function InstanceDetailPage() {
   const logsRef = useRef<HTMLDivElement>(null)
   const identifiedRef = useRef(false)
   const identifyingModsRef = useRef(false)
+
+  const isModpackInstance = instance?.source === 'modrinth' || instance?.source === 'curseforge'
+
+  const openCatalog = (target: 'mods' | ResourceTab) => {
+    const needsPicker = !isModpackInstance && !localStorage.getItem(`modSource_${instance?.id}`)
+    if (needsPicker) { setSourcePicker({ target }); return }
+    if (target === 'mods') setShowCatalog(true)
+    else if (target === 'datapacks') openDatapackCatalog()
+    else setShowFileCatalog(target as ResourceTab)
+  }
+
+  const confirmSourcePicker = (source: 'cf' | 'mr') => {
+    if (!instance) return
+    localStorage.setItem(`modSource_${instance.id}`, source)
+    setModSource(source)
+    const target = sourcePicker!.target
+    setSourcePicker(null)
+    if (target === 'mods') setShowCatalog(true)
+    else if (target === 'datapacks') openDatapackCatalog()
+    else setShowFileCatalog(target as ResourceTab)
+  }
 
   const refreshMods = useCallback(async () => {
     if (!id) return null
@@ -92,14 +178,18 @@ export default function InstanceDetailPage() {
       setInstance(inst)
       setJvmArgs(inst.jvmArgs ?? '')
       window.launcher.java.getForMcVersion(inst.mcVersion).then(setJavaInfo)
-      // Derive modSource from instance origin; fall back to global setting for manual instances
+      // Derive modSource from instance origin; for manual instances use per-instance localStorage preference
       if (inst.source === 'modrinth') {
         setModSource('mr')
       } else if (inst.source === 'curseforge') {
         setModSource('cf')
       } else {
-        window.launcher.settings.get().then((s: any) => { if (s?.modSource) setModSource(s.modSource) }).catch(() => {})
+        const saved = localStorage.getItem(`modSource_${inst.id}`) as 'cf' | 'mr' | null
+        if (saved) setModSource(saved)
       }
+      window.launcher.settings.get().then((s: any) => {
+        setHasCfToken(!!s?.cfApiToken)
+      }).catch(() => setHasCfToken(false))
     })
     refreshMods().then(result => {
       if (!result || identifiedRef.current) return
@@ -484,7 +574,7 @@ export default function InstanceDetailPage() {
                         </button>
                         {instance.modLoader !== 'vanilla' && (
                           <button
-                            onClick={() => setShowCatalog(true)}
+                            onClick={() => openCatalog('mods')}
                             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-purple-200 transition-colors"
                           >
                             <Plus size={12} />
@@ -552,7 +642,7 @@ export default function InstanceDetailPage() {
                               </div>
                               {instance.modLoader !== 'vanilla' && (
                                 <button
-                                  onClick={() => setShowCatalog(true)}
+                                  onClick={() => openCatalog('mods')}
                                   className="flex items-center gap-2 px-4 py-2 bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 rounded-xl text-sm font-medium transition-colors"
                                 >
                                   <Plus size={14} />
@@ -657,7 +747,7 @@ export default function InstanceDetailPage() {
                             Carpeta
                           </button>
                           <button
-                            onClick={() => resourceTab === 'datapacks' ? openDatapackCatalog() : setShowFileCatalog(resourceTab)}
+                            onClick={() => openCatalog(resourceTab)}
                             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-purple-200 transition-colors"
                           >
                             <Plus size={12} />
@@ -689,7 +779,7 @@ export default function InstanceDetailPage() {
                             </div>
                             <div className="flex items-center gap-2">
                               <button
-                                onClick={() => resourceTab === 'datapacks' ? openDatapackCatalog() : setShowFileCatalog(resourceTab)}
+                                onClick={() => openCatalog(resourceTab)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-purple-300 hover:text-purple-200 bg-purple-500/15 hover:bg-purple-500/25 rounded-xl transition-colors"
                               >
                                 <Plus size={11} />
@@ -992,6 +1082,38 @@ export default function InstanceDetailPage() {
               </div>
             )}
 
+            {/* Manual instance: repo source panel */}
+            {!instance.cfMeta && !instance.mrMeta && localStorage.getItem(`modSource_${instance.id}`) && (
+              <div className={`rounded-2xl border p-4 bg-gradient-to-br from-gray-800/90 to-gray-900 ${modSource === 'cf' ? 'border-orange-500/20' : 'border-green-500/20'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <p className="text-[10px] uppercase tracking-widest font-semibold text-gray-600">Repositorio de mods</p>
+                  <button
+                    onClick={() => { localStorage.removeItem(`modSource_${instance.id}`); setSourcePicker({ target: 'mods' }) }}
+                    className="text-[10px] text-gray-500 hover:text-gray-300 transition-colors"
+                  >
+                    Cambiar
+                  </button>
+                </div>
+                <div className="flex items-center gap-2 mt-1">
+                  {modSource === 'cf' ? (
+                    <>
+                      <div className="w-5 h-5 rounded flex items-center justify-center bg-orange-500/15 shrink-0">
+                        <Flame size={11} className="text-orange-400" />
+                      </div>
+                      <span className="text-sm font-medium text-orange-300">CurseForge</span>
+                    </>
+                  ) : (
+                    <>
+                      <div className="w-5 h-5 rounded flex items-center justify-center bg-green-500/15 shrink-0">
+                        <Sparkles size={11} className="text-green-400" />
+                      </div>
+                      <span className="text-sm font-medium text-green-300">Modrinth</span>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Modrinth panel */}
             {instance.mrMeta && (
               <div className="rounded-2xl border bg-gradient-to-br from-gray-800/90 via-green-950/5 to-gray-900 border-green-500/20 p-4">
@@ -1020,6 +1142,15 @@ export default function InstanceDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Source picker modal */}
+      {sourcePicker && (
+        <SourcePickerModal
+          hasCfToken={hasCfToken}
+          onConfirm={confirmSourcePicker}
+          onClose={() => setSourcePicker(null)}
+        />
+      )}
 
       {/* Mod catalog modal */}
       {showCatalog && (
