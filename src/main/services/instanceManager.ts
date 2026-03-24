@@ -4,9 +4,12 @@
  */
 import fs from 'fs'
 import path from 'path'
+import os from 'os'
 import { v4 as uuidV4 } from 'uuid'
 import { getSettings } from '../store'
 import type { ModLoader } from './modLoaderInstaller'
+import archiver from 'archiver'
+import unzipper from 'unzipper'
 
 export interface Instance {
   id: string
@@ -166,4 +169,68 @@ export function toggleMod(instanceId: string, filename: string): string {
 export function removeMod(instanceId: string, filename: string): void {
   const filePath = path.join(getModsDir(instanceId), filename)
   if (fs.existsSync(filePath)) fs.rmSync(filePath, { force: true })
+}
+
+// ── Export / Import ───────────────────────────────────────────────────────────
+
+/** Zips the entire instance directory to destPath (.cwmc). */
+export function exportInstance(id: string, destPath: string): Promise<void> {
+  const instanceDir = getInstanceDir(id)
+  return new Promise((resolve, reject) => {
+    const output = fs.createWriteStream(destPath)
+    const archive = archiver('zip', { zlib: { level: 6 } })
+    output.on('close', resolve)
+    archive.on('error', reject)
+    archive.pipe(output)
+    archive.directory(instanceDir, false)
+    archive.finalize()
+  })
+}
+
+/** Reads instance name from a .cwmc zip without extracting it fully. */
+export async function readImportMeta(zipPath: string): Promise<{ name: string }> {
+  const directory = await unzipper.Open.file(zipPath)
+  const entry = directory.files.find(f => f.path === 'instance.json')
+  if (!entry) throw new Error('Archivo no válido: falta instance.json')
+  const content = await entry.buffer()
+  const inst = JSON.parse(content.toString()) as Instance
+  return { name: inst.name }
+}
+
+/** Extracts a .cwmc zip to a new UUID directory and returns the imported Instance. */
+export async function importInstance(zipPath: string, customName?: string): Promise<Instance> {
+  const tempDir = path.join(os.tmpdir(), `cwmc_import_${Date.now()}`)
+  fs.mkdirSync(tempDir, { recursive: true })
+  try {
+    const directory = await unzipper.Open.file(zipPath)
+    await directory.extract({ path: tempDir })
+
+    const cfgPath = path.join(tempDir, 'instance.json')
+    if (!fs.existsSync(cfgPath)) throw new Error('Archivo no válido: falta instance.json')
+
+    const inst = JSON.parse(fs.readFileSync(cfgPath, 'utf-8')) as Instance
+    const newId = uuidV4()
+    inst.id = newId
+    inst.lastPlayed = undefined
+
+    if (customName?.trim()) {
+      inst.name = customName.trim()
+    } else {
+      // Auto-resolve name collision
+      const allNames = new Set(listInstances().map(i => i.name))
+      if (allNames.has(inst.name)) {
+        let n = 2
+        const base = inst.name
+        while (allNames.has(n === 2 ? `${base} (Importado)` : `${base} (Importado ${n})`)) n++
+        inst.name = n === 2 ? `${base} (Importado)` : `${base} (Importado ${n})`
+      }
+    }
+
+    const newDir = getInstanceDir(newId)
+    fs.cpSync(tempDir, newDir, { recursive: true })
+    fs.writeFileSync(path.join(newDir, 'instance.json'), JSON.stringify(inst, null, 2))
+    return inst
+  } finally {
+    try { fs.rmSync(tempDir, { recursive: true, force: true }) } catch { /* Windows keeps handles open briefly; temp dir will be cleaned by OS */ }
+  }
 }

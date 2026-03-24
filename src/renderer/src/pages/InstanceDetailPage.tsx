@@ -4,9 +4,11 @@ import {
   ArrowLeft, Play, Square, Package, Terminal, Settings2, Trash2,
   Save, CheckCircle, Download, Loader2, Plus, RefreshCw,
   Search, AlertCircle, X, HelpCircle, FolderOpen, ExternalLink, ArrowUpDown,
-  Layers, Image, Sparkles, Database, Flame,
+  Layers, Image, Sparkles, Database, Flame, ScrollText, Upload,
 } from 'lucide-react'
+import { marked } from 'marked'
 import type { Instance, AssetMeta, ModUpdateInfo } from '../types'
+import { useExport } from '../context/ExportContext'
 import { LOADER_NAMES } from '../constants'
 import ModCatalogModal from '../components/ModCatalogModal'
 import FileCatalogModal from '../components/FileCatalogModal'
@@ -189,6 +191,76 @@ function SourcePickerModal({ hasCfToken, onConfirm, onClose }: {
   )
 }
 
+function sanitizeHtml(html: string): string {
+  return html.replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<script[^>]*\/?>/gi, '')
+}
+
+function ChangelogModal({ meta, onClose }: { meta: AssetMeta; onClose: () => void }) {
+  const [content, setContent] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    let cancelled = false
+    async function load() {
+      try {
+        let html = ''
+        if (meta.source === 'cf' && meta.cfModId && meta.cfFileId) {
+          html = sanitizeHtml(await window.launcher.cf.getFileChangelog(meta.cfModId, meta.cfFileId))
+        } else if (meta.source === 'mr' && meta.mrVersionId) {
+          const version = await window.launcher.mr.getVersion(meta.mrVersionId)
+          html = sanitizeHtml(await marked.parse(version?.changelog ?? '') as string)
+        }
+        if (!cancelled) setContent(html || '<p class="text-gray-500">Sin changelog disponible.</p>')
+      } catch {
+        if (!cancelled) setError('No se pudo cargar el changelog.')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50" onClick={onClose} />
+      <div className="fixed inset-0 flex items-center justify-center z-50 pointer-events-none p-4">
+        <div className="pointer-events-auto bg-gray-900 border border-gray-700/60 rounded-2xl shadow-2xl w-full max-w-xl flex flex-col max-h-[80vh]">
+          {/* Header */}
+          <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700/60 shrink-0">
+            <div className="flex items-center gap-2.5 min-w-0">
+              {meta.logo && <img src={meta.logo} alt="" className="w-7 h-7 rounded-lg object-cover shrink-0" onError={e => (e.currentTarget.style.display = 'none')} />}
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-white truncate">{meta.name}</p>
+                <p className="text-xs text-gray-500">Changelog · {meta.source === 'cf' ? 'CurseForge' : 'Modrinth'}</p>
+              </div>
+            </div>
+            <button onClick={onClose} className="shrink-0 p-1.5 rounded-lg text-gray-500 hover:text-gray-200 hover:bg-gray-700/60 transition-colors ml-3">
+              <X size={16} />
+            </button>
+          </div>
+          {/* Body */}
+          <div className="overflow-y-auto px-5 py-4 custom-scrollbar flex-1">
+            {loading ? (
+              <div className="flex items-center justify-center py-10">
+                <Loader2 size={20} className="animate-spin text-gray-500" />
+              </div>
+            ) : error ? (
+              <p className="text-sm text-red-400">{error}</p>
+            ) : (
+              <div
+                className="text-sm text-gray-300 leading-relaxed [&_a]:text-purple-400 [&_a:hover]:text-purple-300 [&_img]:rounded-lg [&_img]:max-w-full [&_h1]:text-white [&_h1]:font-bold [&_h1]:text-base [&_h1]:mt-3 [&_h2]:text-white [&_h2]:font-semibold [&_h2]:mt-3 [&_h3]:text-gray-200 [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-1 [&_p]:mt-2 [&_p:first-child]:mt-0"
+                dangerouslySetInnerHTML={{ __html: content ?? '' }}
+              />
+            )}
+          </div>
+        </div>
+      </div>
+    </>
+  )
+}
+
 export default function InstanceDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -225,7 +297,10 @@ export default function InstanceDetailPage() {
   const [updatingMod, setUpdatingMod] = useState<string | null>(null)
   const [updatesDismissed, setUpdatesDismissed] = useState(false)
   const [updatesChecked, setUpdatesChecked] = useState(false)
+  const { exportingIds, startExport, finishExport } = useExport()
+  const exporting = exportingIds.has(id ?? '')
   // Per-folder update state for datapacks / resourcepacks / shaderpacks
+  const [changelogMeta, setChangelogMeta] = useState<AssetMeta | null>(null)
   const [fileUpdates, setFileUpdates] = useState<Record<string, ModUpdateInfo[]>>({})
   const [checkingFileUpdates, setCheckingFileUpdates] = useState<string | null>(null)
   const [updatingFile, setUpdatingFile] = useState<string | null>(null)
@@ -883,10 +958,10 @@ export default function InstanceDetailPage() {
                     {/* Updates banner */}
                     {!updatesDismissed && modUpdates.length > 0 && (
                       <div className="mx-4 mb-3 rounded-xl border border-blue-500/25 bg-blue-500/8 shrink-0 overflow-hidden">
-                        <div className="flex items-center justify-between px-3 py-2 border-b border-blue-500/15">
+                        <div className="flex items-center justify-between px-4 py-2.5 border-b border-blue-500/15">
                           <div className="flex items-center gap-2">
-                            <Download size={12} className="text-blue-400 shrink-0" />
-                            <span className="text-xs font-medium text-blue-300">
+                            <Download size={14} className="text-blue-400 shrink-0" />
+                            <span className="text-sm font-medium text-blue-300">
                               {modUpdates.length} actualización{modUpdates.length !== 1 ? 'es' : ''} disponible{modUpdates.length !== 1 ? 's' : ''}
                             </span>
                           </div>
@@ -894,38 +969,61 @@ export default function InstanceDetailPage() {
                             <button
                               onClick={handleApplyAllUpdates}
                               disabled={!!updatingMod}
-                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
+                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
                             >
-                              {updatingMod ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                              {updatingMod ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
                               Actualizar todos
                             </button>
                             <button onClick={() => setUpdatesDismissed(true)} className="text-gray-500 hover:text-gray-300 transition-colors">
-                              <X size={13} />
+                              <X size={15} />
                             </button>
                           </div>
                         </div>
-                        <div className="flex flex-col divide-y divide-blue-500/10 max-h-48 overflow-y-auto custom-scrollbar">
+                        <div className="flex flex-col divide-y divide-blue-500/10 max-h-64 overflow-y-auto custom-scrollbar">
                           {modUpdates.map(update => (
-                            <div key={update.filename} className="flex items-center justify-between px-3 py-2 gap-3">
-                              <div className="flex items-center gap-2 min-w-0">
+                            <div key={update.filename} className="flex items-center justify-between px-4 py-3 gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
                                 {update.logo ? (
-                                  <img src={update.logo} alt="" className="w-6 h-6 rounded object-cover shrink-0" onError={e => (e.currentTarget.style.display = 'none')} />
+                                  <img src={update.logo} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0" onError={e => (e.currentTarget.style.display = 'none')} />
                                 ) : (
-                                  <div className="w-6 h-6 rounded bg-gray-700/60 shrink-0 flex items-center justify-center">
-                                    <Package size={11} className="text-gray-500" />
+                                  <div className="w-9 h-9 rounded-lg bg-gray-700/60 shrink-0 flex items-center justify-center">
+                                    <Package size={15} className="text-gray-500" />
                                   </div>
                                 )}
-                                <span className="text-xs text-gray-300 truncate">{update.name}</span>
-                                <span className="text-xs text-gray-600 shrink-0">{update.source === 'cf' ? 'CurseForge' : 'Modrinth'}</span>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="text-sm text-gray-200 truncate font-medium">{update.name}</span>
+                                    {update.releaseType !== 'release' && (
+                                      <span className={`text-xs font-medium px-1.5 py-0.5 rounded shrink-0 ${update.releaseType === 'beta' ? 'bg-yellow-500/15 text-yellow-400' : 'bg-red-500/15 text-red-400'}`}>
+                                        {update.releaseType === 'beta' ? 'Beta' : 'Alpha'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-xs text-gray-600">{update.source === 'cf' ? 'CurseForge' : 'Modrinth'}</span>
+                                </div>
                               </div>
-                              <button
-                                onClick={() => handleApplyUpdate(update)}
-                                disabled={!!updatingMod}
-                                className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
-                              >
-                                {updatingMod === update.filename ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
-                                Actualizar
-                              </button>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                {(update.source === 'cf' ? update.latestCfFileId : update.latestMrVersionId) ? (
+                                  <button
+                                    title="Changelog de la actualización"
+                                    onClick={() => setChangelogMeta(update.source === 'cf'
+                                      ? { source: 'cf', name: update.name, logo: update.logo, slug: '', cfModId: update.cfModId, cfFileId: update.latestCfFileId }
+                                      : { source: 'mr', name: update.name, logo: update.logo, slug: '', mrVersionId: update.latestMrVersionId }
+                                    )}
+                                    className="p-1.5 rounded-lg text-blue-400 hover:text-blue-200 hover:bg-blue-700/20 transition-colors"
+                                  >
+                                    <ScrollText size={14} />
+                                  </button>
+                                ) : null}
+                                <button
+                                  onClick={() => handleApplyUpdate(update)}
+                                  disabled={!!updatingMod}
+                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
+                                >
+                                  {updatingMod === update.filename ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                                  Actualizar
+                                </button>
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -1065,10 +1163,10 @@ export default function InstanceDetailPage() {
                       {/* Updates banner */}
                       {!thisDismissed && folderUpdates.length > 0 && (
                         <div className="mb-3 rounded-xl border border-blue-500/25 bg-blue-500/8 shrink-0 overflow-hidden">
-                          <div className="flex items-center justify-between px-3 py-2 border-b border-blue-500/15">
+                          <div className="flex items-center justify-between px-4 py-2.5 border-b border-blue-500/15">
                             <div className="flex items-center gap-2">
-                              <Download size={12} className="text-blue-400 shrink-0" />
-                              <span className="text-xs font-medium text-blue-300">
+                              <Download size={14} className="text-blue-400 shrink-0" />
+                              <span className="text-sm font-medium text-blue-300">
                                 {folderUpdates.length} actualización{folderUpdates.length !== 1 ? 'es' : ''} disponible{folderUpdates.length !== 1 ? 's' : ''}
                               </span>
                             </div>
@@ -1076,38 +1174,61 @@ export default function InstanceDetailPage() {
                               <button
                                 onClick={() => handleApplyAllFileUpdates(resourceTab)}
                                 disabled={!!updatingFile}
-                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
+                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
                               >
-                                {updatingFile ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                                {updatingFile ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
                                 Actualizar todos
                               </button>
                               <button onClick={() => setFileUpdatesDismissed(prev => ({ ...prev, [resourceTab]: true }))} className="text-gray-500 hover:text-gray-300 transition-colors">
-                                <X size={13} />
+                                <X size={15} />
                               </button>
                             </div>
                           </div>
-                          <div className="flex flex-col divide-y divide-blue-500/10 max-h-48 overflow-y-auto custom-scrollbar">
+                          <div className="flex flex-col divide-y divide-blue-500/10 max-h-64 overflow-y-auto custom-scrollbar">
                             {folderUpdates.map(update => (
-                              <div key={update.filename} className="flex items-center justify-between px-3 py-2 gap-3">
-                                <div className="flex items-center gap-2 min-w-0">
+                              <div key={update.filename} className="flex items-center justify-between px-4 py-3 gap-3">
+                                <div className="flex items-center gap-3 min-w-0">
                                   {update.logo ? (
-                                    <img src={update.logo} alt="" className="w-6 h-6 rounded object-cover shrink-0" onError={e => (e.currentTarget.style.display = 'none')} />
+                                    <img src={update.logo} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0" onError={e => (e.currentTarget.style.display = 'none')} />
                                   ) : (
-                                    <div className="w-6 h-6 rounded bg-gray-700/60 shrink-0 flex items-center justify-center">
-                                      <Icon size={11} className="text-gray-500" />
+                                    <div className="w-9 h-9 rounded-lg bg-gray-700/60 shrink-0 flex items-center justify-center">
+                                      <Icon size={15} className="text-gray-500" />
                                     </div>
                                   )}
-                                  <span className="text-xs text-gray-300 truncate">{update.name}</span>
-                                  <span className="text-xs text-gray-600 shrink-0">{update.source === 'cf' ? 'CurseForge' : 'Modrinth'}</span>
+                                  <div className="min-w-0">
+                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                      <span className="text-sm text-gray-200 truncate font-medium">{update.name}</span>
+                                      {update.releaseType !== 'release' && (
+                                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded shrink-0 ${update.releaseType === 'beta' ? 'bg-yellow-500/15 text-yellow-400' : 'bg-red-500/15 text-red-400'}`}>
+                                          {update.releaseType === 'beta' ? 'Beta' : 'Alpha'}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <span className="text-xs text-gray-600">{update.source === 'cf' ? 'CurseForge' : 'Modrinth'}</span>
+                                  </div>
                                 </div>
-                                <button
-                                  onClick={() => handleApplyFileUpdate(resourceTab, update)}
-                                  disabled={!!updatingFile}
-                                  className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
-                                >
-                                  {updatingFile === update.filename ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
-                                  Actualizar
-                                </button>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                  {(update.source === 'cf' ? update.latestCfFileId : update.latestMrVersionId) ? (
+                                    <button
+                                      title="Changelog de la actualización"
+                                      onClick={() => setChangelogMeta(update.source === 'cf'
+                                        ? { source: 'cf', name: update.name, logo: update.logo, slug: '', cfModId: update.cfModId, cfFileId: update.latestCfFileId }
+                                        : { source: 'mr', name: update.name, logo: update.logo, slug: '', mrVersionId: update.latestMrVersionId }
+                                      )}
+                                      className="p-1.5 rounded-lg text-blue-400 hover:text-blue-200 hover:bg-blue-700/20 transition-colors"
+                                    >
+                                      <ScrollText size={14} />
+                                    </button>
+                                  ) : null}
+                                  <button
+                                    onClick={() => handleApplyFileUpdate(resourceTab, update)}
+                                    disabled={!!updatingFile}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
+                                  >
+                                    {updatingFile === update.filename ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                                    Actualizar
+                                  </button>
+                                </div>
                               </div>
                             ))}
                           </div>
@@ -1269,6 +1390,28 @@ export default function InstanceDetailPage() {
                     )}
                   </div>
                 )}
+
+                {/* Export */}
+                <div className="bg-gradient-to-br from-gray-800/90 via-purple-950/10 to-gray-900 border border-purple-500/25 rounded-2xl p-4 space-y-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-200">Exportar instancia</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Guarda mods, recursos y configuración en un archivo <span className="font-mono text-gray-400">.cwmc</span></p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!id || exporting) return
+                      startExport(id)
+                      try { await window.launcher.instances.export(id) }
+                      catch { /* canceled or error */ }
+                      finally { finishExport(id) }
+                    }}
+                    disabled={exporting}
+                    className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-medium bg-gray-700/60 hover:bg-gray-700 text-gray-300 hover:text-white transition-colors disabled:opacity-50"
+                  >
+                    {exporting ? <Loader2 size={13} className="animate-spin" /> : <Upload size={13} />}
+                    {exporting ? 'Exportando…' : 'Exportar'}
+                  </button>
+                </div>
 
                 {/* JVM Args */}
                 <div className="bg-gradient-to-br from-gray-800/90 via-purple-950/10 to-gray-900 border border-purple-500/25 rounded-2xl p-4 space-y-3">
@@ -1461,6 +1604,11 @@ export default function InstanceDetailPage() {
           </div>
         </div>
       </div>
+
+      {/* Changelog modal */}
+      {changelogMeta && (
+        <ChangelogModal meta={changelogMeta} onClose={() => setChangelogMeta(null)} />
+      )}
 
       {/* Source picker modal */}
       {sourcePicker && (

@@ -36,6 +36,9 @@ declare global {
         create: (params: any) => Promise<any>
         delete: (id: string) => Promise<any>
         clone: (id: string, customName?: string) => Promise<any>
+        export: (id: string) => Promise<{ ok?: boolean; canceled?: boolean; filePath?: string }>
+        pickImportFile: () => Promise<{ ok?: boolean; canceled?: boolean; zipPath?: string; name?: string }>
+        import: (zipPath: string, customName: string) => Promise<{ ok?: boolean; instance?: any }>
         patch: (id: string, partial: Record<string, any>) => Promise<any>
         isRunning: (id: string) => Promise<boolean>
         stop: (id: string) => Promise<any>

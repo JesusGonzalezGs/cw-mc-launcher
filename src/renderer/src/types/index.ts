@@ -134,6 +134,7 @@ export interface ModUpdateInfo {
   name: string
   logo?: string
   source: 'cf' | 'mr'
+  releaseType: 'release' | 'beta' | 'alpha'
   cfModId?: number
   latestCfFileId?: number
   mrSlug?: string

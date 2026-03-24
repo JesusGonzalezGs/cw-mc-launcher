@@ -60,6 +60,7 @@ export interface ModUpdateInfo {
   name: string
   logo?: string
   source: 'cf' | 'mr'
+  releaseType: 'release' | 'beta' | 'alpha'
   cfModId?: number
   latestCfFileId?: number
   mrSlug?: string
@@ -553,7 +554,8 @@ export async function checkModUpdates(instanceId: string, folder: string = 'mods
       const withLoader = loaderTypeId ? forVersion.filter((f: any) => f.modLoader === loaderTypeId) : forVersion
       const best = (withLoader.length > 0 ? withLoader : forVersion)[0]
       if (!best || best.fileId === meta.cfFileId) continue
-      updates.push({ filename, name: meta.name, logo: meta.logo, source: 'cf', cfModId: meta.cfModId, latestCfFileId: best.fileId })
+      const cfReleaseType = best.releaseType === 3 ? 'alpha' : best.releaseType === 2 ? 'beta' : 'release'
+      updates.push({ filename, name: meta.name, logo: meta.logo, source: 'cf', releaseType: cfReleaseType, cfModId: meta.cfModId, latestCfFileId: best.fileId })
     }
   }
 
@@ -567,7 +569,8 @@ export async function checkModUpdates(instanceId: string, folder: string = 'mods
         try {
           const versions = await mrGetProjectVersions(meta.mrProjectId!, gameVersions, loaders)
           if (versions.length === 0 || versions[0].id === meta.mrVersionId) return
-          updates.push({ filename, name: meta.name, logo: meta.logo, source: 'mr', mrProjectId: meta.mrProjectId, mrSlug: meta.mrSlug, latestMrVersionId: versions[0].id })
+          const mrReleaseType: 'release' | 'beta' | 'alpha' = versions[0].version_type === 'alpha' ? 'alpha' : versions[0].version_type === 'beta' ? 'beta' : 'release'
+          updates.push({ filename, name: meta.name, logo: meta.logo, source: 'mr', releaseType: mrReleaseType, mrProjectId: meta.mrProjectId, mrSlug: meta.mrSlug, latestMrVersionId: versions[0].id })
         } catch { /* skip */ }
       })
     )

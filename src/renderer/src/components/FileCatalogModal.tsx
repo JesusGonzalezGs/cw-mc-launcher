@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react'
 import { marked } from 'marked'
 import {
   X, Search, Download, RefreshCw, ChevronLeft, ChevronRight,
-  Tag, ArrowUpDown, Image, Sparkles, Database,
+  Tag, Layers, ArrowUpDown, Image, Sparkles, Database,
 } from 'lucide-react'
 import { mrSearch, mrGetProject, mrGetProjectVersions } from '../api/mrApi'
 import ImageViewer from './ImageViewer'
@@ -123,9 +123,15 @@ interface FileDetailViewProps {
 
 function FileDetailView({ mod, source, version, installingVersionId, installed, installError, installedVersionId, Icon, onInstall, onBack }: FileDetailViewProps) {
   const isCf = source === 'cf'
-  const [detailTab, setDetailTab] = useState<'desc' | 'versions' | 'screenshots'>('desc')
+  const [detailTab, setDetailTab] = useState<'desc' | 'changelog' | 'versions' | 'screenshots'>('desc')
   const [description, setDescription] = useState('')
   const [loadingDesc, setLoadingDesc] = useState(false)
+  const [cfChangelogFileId, setCfChangelogFileId] = useState<number | null>(null)
+  const [cfChangelogContent, setCfChangelogContent] = useState<string | null>(null)
+  const [cfChangelogLoading, setCfChangelogLoading] = useState(false)
+  const [cfChangelogFetched, setCfChangelogFetched] = useState<number | null>(null)
+  const [mrRawVersions, setMrRawVersions] = useState<any[]>([])
+  const [mrChangelogVersionId, setMrChangelogVersionId] = useState<string | null>(null)
   const [normVersions, setNormVersions] = useState<NormFileVersion[]>([])
   const [loadingVersions, setLoadingVersions] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState<number | null>(null)
@@ -167,6 +173,11 @@ function FileDetailView({ mod, source, version, installingVersionId, installed, 
   const uid = isCf ? mod.id : mod.project_id
 
   useEffect(() => {
+    setCfChangelogFileId(null)
+    setCfChangelogContent(null)
+    setCfChangelogFetched(null)
+    setMrRawVersions([])
+    setMrChangelogVersionId(null)
     setLoadingDesc(true)
     const descP: Promise<string> = isCf
       ? (window.launcher.cf.getModDescription(mod.id) as Promise<string>)
@@ -176,13 +187,33 @@ function FileDetailView({ mod, source, version, installingVersionId, installed, 
     setLoadingVersions(true)
     const versP: Promise<NormFileVersion[]> = isCf
       ? (window.launcher.cf.getModFiles(mod.id) as Promise<any>).then(r => (r?.data ?? []).map(cfFileToNorm))
-      : mrGetProjectVersions(mod.project_id, version ? [version] : undefined).then((vs: any[]) => vs.map(mrVerToNorm))
+      : mrGetProjectVersions(mod.project_id, version ? [version] : undefined).then((vs: any[]) => {
+          setMrRawVersions(vs)
+          const initId = vs.find((v: any) => v.id === installedVersionId) ? installedVersionId : vs[0]?.id ?? null
+          setMrChangelogVersionId(initId ?? null)
+          return vs.map(mrVerToNorm)
+        })
     versP.then(nv => {
       setNormVersions(nv)
+      if (isCf) {
+        const initId = installedVersionId ? Number(installedVersionId) : nv[0]?.id ? Number(nv[0].id) : null
+        setCfChangelogFileId(initId)
+      }
       const hasVersion = nv.some(v => v.gameVersions.includes(version))
       setVersionFilter(version && hasVersion ? version : '')
     }).catch(() => {}).finally(() => setLoadingVersions(false))
   }, [uid])
+
+  useEffect(() => {
+    if (detailTab !== 'changelog' || !isCf || !cfChangelogFileId) return
+    if (cfChangelogFetched === cfChangelogFileId) return
+    setCfChangelogLoading(true)
+    setCfChangelogContent(null)
+    window.launcher.cf.getFileChangelog(mod.id, cfChangelogFileId)
+      .then(html => { setCfChangelogContent(html as string); setCfChangelogFetched(cfChangelogFileId) })
+      .catch(() => { setCfChangelogContent(''); setCfChangelogFetched(cfChangelogFileId) })
+      .finally(() => setCfChangelogLoading(false))
+  }, [detailTab, cfChangelogFileId])
 
   return (
     <>
@@ -245,8 +276,8 @@ function FileDetailView({ mod, source, version, installingVersionId, installed, 
           </div>
         </div>
         <div className="flex gap-1 px-5 py-2 border-b border-gray-700/60">
-          {(['desc', 'versions', 'screenshots'] as const).map(key => {
-            const labels = { desc: 'Descripción', versions: 'Versiones', screenshots: 'Capturas' }
+          {(['desc', 'changelog', 'versions', 'screenshots'] as const).map(key => {
+            const labels = { desc: 'Descripción', changelog: 'Changelog', versions: 'Versiones', screenshots: 'Capturas' }
             return (
               <button key={key} onClick={() => setDetailTab(key)}
                 className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${detailTab === key ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-300 hover:bg-gray-700/30'}`}>
@@ -264,6 +295,63 @@ function FileDetailView({ mod, source, version, installingVersionId, installed, 
                 dangerouslySetInnerHTML={{ __html: description }} />
             ) : <p className="text-sm text-gray-600">Sin descripción disponible.</p>
           )}
+          {detailTab === 'changelog' && (() => {
+            const clsContent = 'rounded-xl p-4 bg-gray-800/60 border border-gray-700/40 text-gray-300 text-sm leading-relaxed [&_a]:text-purple-400 [&_a:hover]:text-purple-300 [&_img]:rounded-lg [&_img]:max-w-full [&_h1]:text-white [&_h1]:font-bold [&_h1]:text-base [&_h2]:text-white [&_h2]:font-semibold [&_h3]:text-gray-200 [&_h3]:font-semibold [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_li]:mt-1 [&_p]:mt-2 overflow-hidden'
+            const versionSelectorCls = (active: boolean) => `text-xs px-2.5 py-1 rounded-lg border font-medium transition-all ${active ? 'bg-purple-500/20 border-purple-500/40 text-purple-300' : 'bg-gray-800/60 border-gray-700/60 text-gray-400 hover:border-gray-600 hover:text-gray-300'}`
+            if (isCf) {
+              return (
+                <div>
+                  {normVersions.length > 0 && (
+                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-700/50 flex-wrap">
+                      <span className="text-xs text-gray-500 shrink-0">Versión:</span>
+                      <button onClick={() => { setCfChangelogFileId(Number(normVersions[0].id)); setCfChangelogFetched(null); setCfChangelogContent(null) }} className={versionSelectorCls(cfChangelogFileId === Number(normVersions[0].id))}>Última versión</button>
+                      {normVersions.length > 1 && (
+                        <FilterSelect icon={Layers} value={String(cfChangelogFileId ?? '')}
+                          onChange={v => { setCfChangelogFileId(v ? Number(v) : null); setCfChangelogFetched(null); setCfChangelogContent(null) }}
+                          placeholder="Seleccionar versión"
+                          options={[{ value: '', label: 'Seleccionar versión' }, ...normVersions.map(v => ({ value: v.id, label: v.name }))]} />
+                      )}
+                    </div>
+                  )}
+                  {cfChangelogLoading ? (
+                    <div className="flex justify-center py-10"><span className="w-5 h-5 rounded-full border-2 border-t-transparent border-purple-400 animate-spin" /></div>
+                  ) : cfChangelogContent ? (
+                    <div className={clsContent} dangerouslySetInnerHTML={{ __html: cfChangelogContent }} />
+                  ) : cfChangelogContent === '' ? (
+                    <p className="text-sm text-gray-600">Sin changelog disponible para esta versión.</p>
+                  ) : loadingVersions ? (
+                    <div className="h-32 rounded-xl animate-pulse bg-gray-700/50" />
+                  ) : null}
+                </div>
+              )
+            } else {
+              const raw = mrRawVersions.find((v: any) => v.id === mrChangelogVersionId)
+              const cl: string = raw?.changelog ?? ''
+              return (
+                <div>
+                  {mrRawVersions.length > 0 && (
+                    <div className="flex items-center gap-2 mb-4 pb-3 border-b border-gray-700/50 flex-wrap">
+                      <span className="text-xs text-gray-500 shrink-0">Versión:</span>
+                      <button onClick={() => setMrChangelogVersionId(mrRawVersions[0].id)} className={versionSelectorCls(mrChangelogVersionId === mrRawVersions[0].id)}>Última versión</button>
+                      {mrRawVersions.length > 1 && (
+                        <FilterSelect icon={Layers} value={mrChangelogVersionId ?? ''}
+                          onChange={v => setMrChangelogVersionId(v || null)}
+                          placeholder="Seleccionar versión"
+                          options={[{ value: '', label: 'Seleccionar versión' }, ...mrRawVersions.map((v: any) => ({ value: v.id, label: v.name || v.version_number || v.id }))]} />
+                      )}
+                    </div>
+                  )}
+                  {cl ? (
+                    <div className={clsContent}>
+                      <pre className="whitespace-pre-wrap font-sans">{cl}</pre>
+                    </div>
+                  ) : loadingVersions ? (
+                    <div className="h-32 rounded-xl animate-pulse bg-gray-700/50" />
+                  ) : <p className="text-sm text-gray-600">Sin changelog disponible para esta versión.</p>}
+                </div>
+              )
+            }
+          })()}
           {detailTab === 'versions' && (
             <>
               <div className="-mx-5 -mt-5 mb-4 px-4 py-3 border-b border-gray-700/60 flex flex-wrap gap-2">

@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, AlertCircle, Trash2, Gamepad2, Layers, PackageOpen, Loader2, Copy } from 'lucide-react'
+import { Plus, AlertCircle, Trash2, Gamepad2, Layers, PackageOpen, Loader2, Copy, Upload } from 'lucide-react'
+import { useExport } from '../context/ExportContext'
 import InstanceCard from '../components/InstanceCard'
 import Modal from '../components/common/Modal'
 import type { Instance } from '../types'
@@ -41,6 +42,11 @@ export default function InstancesPage() {
   const [pendingClone, setPendingClone] = useState<Instance | null>(null)
   const [cloneName, setCloneName] = useState('')
   const [cloneNameError, setCloneNameError] = useState('')
+  const { isImporting: importing, startImport, finishImport } = useExport()
+  const [importError, setImportError] = useState('')
+  const [importPending, setImportPending] = useState<{ zipPath: string; name: string } | null>(null)
+  const [importName, setImportName] = useState('')
+  const [importNameError, setImportNameError] = useState('')
 
   const load = useCallback(async () => {
     try {
@@ -121,6 +127,44 @@ export default function InstancesPage() {
     setCloneName(`${instance.name} (Copia)`)
     setCloneNameError('')
     setPendingClone(instance)
+  }
+
+  async function handleImport() {
+    if (importing) return
+    startImport()
+    setImportError('')
+    try {
+      const result = await window.launcher.instances.pickImportFile()
+      if (result.canceled || !result.zipPath) return
+      setImportName(result.name ?? '')
+      setImportNameError('')
+      setImportPending({ zipPath: result.zipPath, name: result.name ?? '' })
+    } catch (e: any) {
+      setImportError(e.message ?? 'Error al leer el archivo')
+    } finally {
+      finishImport()
+    }
+  }
+
+  async function confirmImport() {
+    if (!importPending || !importName.trim()) return
+    const existing = await window.launcher.instances.list().catch(() => [] as Instance[])
+    if (existing.some((i: Instance) => i.name.toLowerCase() === importName.trim().toLowerCase())) {
+      setImportNameError('Ya existe una instancia con ese nombre')
+      return
+    }
+    const { zipPath } = importPending
+    setImportPending(null)
+    startImport()
+    setImportError('')
+    try {
+      await window.launcher.instances.import(zipPath, importName.trim())
+      load()
+    } catch (e: any) {
+      setImportError(e.message ?? 'Error al importar')
+    } finally {
+      finishImport()
+    }
   }
 
   async function confirmClone() {
@@ -227,6 +271,48 @@ export default function InstancesPage() {
         </div>
       </Modal>
 
+      {/* Import name modal */}
+      <Modal
+        open={!!importPending}
+        onClose={() => setImportPending(null)}
+        title="Importar instancia"
+      >
+        <p className="text-sm text-gray-400 mb-1">
+          Archivo: <span className="font-mono text-gray-300 text-xs">{importPending?.zipPath.split(/[\\/]/).pop()}</span>
+        </p>
+        <p className="text-sm text-gray-400 mb-3">Elige un nombre para la instancia importada.</p>
+        <input
+          type="text"
+          value={importName}
+          onChange={(e) => { setImportName(e.target.value); setImportNameError('') }}
+          onKeyDown={(e) => e.key === 'Enter' && confirmImport()}
+          placeholder="Nombre de la instancia"
+          autoFocus
+          className="w-full px-3 py-2 rounded-xl text-sm border bg-gray-950 border-gray-700 text-gray-200 placeholder-gray-500 focus:outline-none focus:border-purple-500/60 transition-colors"
+        />
+        {importNameError && (
+          <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-lg px-3 py-2 mt-2">
+            {importNameError}
+          </p>
+        )}
+        <div className="flex justify-end gap-2 -mx-5 px-5 pt-4 mt-4 border-t border-gray-700/60">
+          <button
+            onClick={() => setImportPending(null)}
+            className="px-3 py-1.5 rounded-lg text-sm text-gray-400 hover:text-gray-200 hover:bg-gray-700/40 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={confirmImport}
+            disabled={!importName.trim()}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            <Upload size={14} />
+            Importar
+          </button>
+        </div>
+      </Modal>
+
       <div className="relative z-10 max-w-7xl mx-auto px-4 md:px-6 pt-8 pb-16">
 
         {/* Header */}
@@ -265,21 +351,31 @@ export default function InstancesPage() {
               </div>
             )}
 
-            <button
-              onClick={() => navigate('/instances/new')}
-              className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-md shadow-purple-900/20 transition-all hover:scale-[1.02] active:scale-95"
-            >
-              <Plus size={15} />
-              Nueva instancia
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleImport}
+                disabled={importing}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium bg-gray-800 hover:bg-gray-700 border border-gray-700/60 hover:border-gray-600 text-gray-300 hover:text-white transition-all disabled:opacity-50"
+              >
+                {importing ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+                {importing ? 'Importando…' : 'Importar'}
+              </button>
+              <button
+                onClick={() => navigate('/instances/new')}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white shadow-md shadow-purple-900/20 transition-all hover:scale-[1.02] active:scale-95"
+              >
+                <Plus size={15} />
+                Nueva instancia
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Error */}
-        {error && (
+        {(error || importError) && (
           <div className="flex items-center gap-2 p-3 mb-6 bg-red-500/10 border border-red-500/20 rounded-xl">
             <AlertCircle size={16} className="text-red-400 shrink-0" />
-            <p className="text-red-400 text-sm">{error}</p>
+            <p className="text-red-400 text-sm">{error || importError}</p>
           </div>
         )}
 

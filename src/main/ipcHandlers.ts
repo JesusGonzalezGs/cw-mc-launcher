@@ -1,7 +1,7 @@
 /**
  * Registro de todos los handlers IPC del proceso main.
  */
-import { ipcMain, app, shell } from 'electron'
+import { ipcMain, app, shell, dialog } from 'electron'
 import { getMainWindow } from './index'
 import {
   downloadJava,
@@ -34,6 +34,9 @@ import {
   toggleMod,
   removeMod,
   getInstanceDir,
+  exportInstance,
+  importInstance,
+  readImportMeta,
 } from './services/instanceManager'
 import {
   getMcVersionManifest,
@@ -185,6 +188,37 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('instances:clone', async (_, id: string, customName?: string) => cloneInstance(id, customName))
+
+  ipcMain.handle('instances:export', async (_, id: string) => {
+    const instance = getInstance(id)
+    if (!instance) throw new Error('Instancia no encontrada')
+    const { filePath, canceled } = await dialog.showSaveDialog({
+      title: 'Exportar instancia',
+      defaultPath: `${instance.name}.cwmc`,
+      filters: [{ name: 'CW-MC Launcher Instance', extensions: ['cwmc'] }],
+    })
+    if (canceled || !filePath) return { canceled: true }
+    await exportInstance(id, filePath)
+    return { ok: true, filePath }
+  })
+
+  // Step 1: pick a file and return its path + the name stored inside
+  ipcMain.handle('instances:pickImportFile', async () => {
+    const { filePaths, canceled } = await dialog.showOpenDialog({
+      title: 'Importar instancia',
+      filters: [{ name: 'CW-MC Launcher Instance', extensions: ['cwmc'] }],
+      properties: ['openFile'],
+    })
+    if (canceled || filePaths.length === 0) return { canceled: true }
+    const meta = await readImportMeta(filePaths[0])
+    return { ok: true, zipPath: filePaths[0], name: meta.name }
+  })
+
+  // Step 2: import with the user-chosen name
+  ipcMain.handle('instances:import', async (_, zipPath: string, customName: string) => {
+    const instance = await importInstance(zipPath, customName)
+    return { ok: true, instance }
+  })
 
   ipcMain.handle('instances:patch', (_, id: string, partial: any) => patchInstance(id, partial))
 

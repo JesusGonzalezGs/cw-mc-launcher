@@ -11,6 +11,7 @@ import CatalogPage from './pages/CatalogPage'
 import ModpackDetailPage from './pages/ModpackDetailPage'
 import SettingsPage from './pages/SettingsPage'
 import { InstallProvider } from './context/InstallContext'
+import { ExportProvider } from './context/ExportContext'
 import GlobalInstallBar from './components/GlobalInstallBar'
 import UpdateNotification from './components/UpdateNotification'
 import type { LauncherUser } from './types'
@@ -73,6 +74,7 @@ export default function App() {
 
   // ── App principal ──────────────────────────────────────────────────────────
   return (
+    <ExportProvider>
     <InstallProvider>
       <div className="flex flex-col h-screen bg-[#0a0a14] overflow-hidden">
         <TitleBar />
@@ -101,5 +103,6 @@ export default function App() {
       </div>
       <UpdateNotification />
     </InstallProvider>
+    </ExportProvider>
   )
 }
