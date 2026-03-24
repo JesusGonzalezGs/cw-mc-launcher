@@ -64,6 +64,7 @@
   "dependencies": {
     "@types/archiver": "^7.0.0",
     "archiver": "^7.0.1",
+    "archiver-utils": "^5.0.2",
     "dotenv": "^17.3.1",
     "electron-store": "^8.1.0",
     "electron-updater": "^6.8.3",
