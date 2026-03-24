@@ -42,6 +42,8 @@ declare global {
         launch: (instance: any) => Promise<any>
         getMods: (id: string) => Promise<string[]>
         getModsMeta: (id: string) => Promise<import('../types').AssetsJson>
+        checkModUpdates: (id: string, folder: string) => Promise<import('../types').ModUpdateInfo[]>
+        applyModUpdate: (id: string, folder: string, update: import('../types').ModUpdateInfo) => Promise<void>
         toggleMod: (id: string, filename: string) => Promise<string>
         removeMod: (id: string, filename: string) => Promise<any>
         identifyMods: (instanceId: string) => Promise<any>

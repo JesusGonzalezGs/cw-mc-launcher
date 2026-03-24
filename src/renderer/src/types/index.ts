@@ -85,17 +85,18 @@ export interface AssetMeta {
   slug: string
   logo?: string
   summary?: string
-  gameVersions?: string[]
   cfModId?: number
   cfFileId?: number
   cfDeps?: number[]
   mrProjectId?: string
   mrVersionId?: string
   mrSlug?: string
+  mrDeps?: string[]
   recognized?: boolean
 }
 
 export interface AssetsJson {
+  version: 1
   assets: Record<string, AssetMeta>
 }
 
@@ -126,6 +127,18 @@ export interface CfFile {
   downloadCount: number
   fileDate: string
   downloadUrl?: string
+}
+
+export interface ModUpdateInfo {
+  filename: string
+  name: string
+  logo?: string
+  source: 'cf' | 'mr'
+  cfModId?: number
+  latestCfFileId?: number
+  mrSlug?: string
+  mrProjectId?: string
+  latestMrVersionId?: string
 }
 
 export interface InstallProgress {

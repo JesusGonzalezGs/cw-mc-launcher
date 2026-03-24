@@ -6,7 +6,7 @@ import {
   Search, AlertCircle, X, HelpCircle, FolderOpen, ExternalLink, ArrowUpDown,
   Layers, Image, Sparkles, Database, Flame,
 } from 'lucide-react'
-import type { Instance, AssetMeta } from '../types'
+import type { Instance, AssetMeta, ModUpdateInfo } from '../types'
 import { LOADER_NAMES } from '../constants'
 import ModCatalogModal from '../components/ModCatalogModal'
 import FileCatalogModal from '../components/FileCatalogModal'
@@ -220,6 +220,17 @@ export default function InstanceDetailPage() {
   const [identifyingMods, setIdentifyingMods] = useState(false)
   const [modToDelete, setModToDelete] = useState<string | null>(null)
   const [togglingMod, setTogglingMod] = useState<string | null>(null)
+  const [modUpdates, setModUpdates] = useState<ModUpdateInfo[]>([])
+  const [checkingUpdates, setCheckingUpdates] = useState(false)
+  const [updatingMod, setUpdatingMod] = useState<string | null>(null)
+  const [updatesDismissed, setUpdatesDismissed] = useState(false)
+  const [updatesChecked, setUpdatesChecked] = useState(false)
+  // Per-folder update state for datapacks / resourcepacks / shaderpacks
+  const [fileUpdates, setFileUpdates] = useState<Record<string, ModUpdateInfo[]>>({})
+  const [checkingFileUpdates, setCheckingFileUpdates] = useState<string | null>(null)
+  const [updatingFile, setUpdatingFile] = useState<string | null>(null)
+  const [fileUpdatesChecked, setFileUpdatesChecked] = useState<Record<string, boolean>>({})
+  const [fileUpdatesDismissed, setFileUpdatesDismissed] = useState<Record<string, boolean>>({})
   const logsRef = useRef<HTMLDivElement>(null)
   const identifiedRef = useRef(false)
   const identifyingModsRef = useRef(false)
@@ -462,6 +473,104 @@ export default function InstanceDetailPage() {
     }
   }
 
+  async function handleCheckUpdates() {
+    if (!id || checkingUpdates) return
+    setCheckingUpdates(true)
+    setUpdatesDismissed(false)
+    setUpdatesChecked(false)
+    try {
+      const updates = await window.launcher.instances.checkModUpdates(id, 'mods')
+      setModUpdates(updates)
+      setUpdatesChecked(true)
+    } catch { /* ignore */ } finally {
+      setCheckingUpdates(false)
+    }
+  }
+
+  async function handleApplyUpdate(update: ModUpdateInfo) {
+    if (!id || updatingMod) return
+    setUpdatingMod(update.filename)
+    try {
+      await window.launcher.instances.applyModUpdate(id, 'mods', update)
+      setModUpdates(prev => prev.filter(u => u.filename !== update.filename))
+      const [newMods, newMeta] = await Promise.all([
+        window.launcher.instances.getMods(id),
+        window.launcher.instances.getModsMeta(id),
+      ])
+      setMods(newMods)
+      setModsMeta(newMeta.assets)
+    } catch { /* ignore */ } finally {
+      setUpdatingMod(null)
+    }
+  }
+
+  async function handleApplyAllUpdates() {
+    if (!id || updatingMod || modUpdates.length === 0) return
+    for (const update of [...modUpdates]) {
+      setUpdatingMod(update.filename)
+      try {
+        await window.launcher.instances.applyModUpdate(id, 'mods', update)
+        setModUpdates(prev => prev.filter(u => u.filename !== update.filename))
+      } catch { /* continue */ }
+    }
+    setUpdatingMod(null)
+    const [newMods, newMeta] = await Promise.all([
+      window.launcher.instances.getMods(id),
+      window.launcher.instances.getModsMeta(id),
+    ])
+    setMods(newMods)
+    setModsMeta(newMeta.assets)
+  }
+
+  async function handleCheckFileUpdates(folder: string) {
+    if (!id || checkingFileUpdates) return
+    setCheckingFileUpdates(folder)
+    setFileUpdatesDismissed(prev => ({ ...prev, [folder]: false }))
+    setFileUpdatesChecked(prev => ({ ...prev, [folder]: false }))
+    try {
+      const updates = await window.launcher.instances.checkModUpdates(id, folder)
+      setFileUpdates(prev => ({ ...prev, [folder]: updates }))
+      setFileUpdatesChecked(prev => ({ ...prev, [folder]: true }))
+    } catch { /* ignore */ } finally {
+      setCheckingFileUpdates(null)
+    }
+  }
+
+  async function handleApplyFileUpdate(folder: string, update: ModUpdateInfo) {
+    if (!id || updatingFile) return
+    setUpdatingFile(update.filename)
+    try {
+      await window.launcher.instances.applyModUpdate(id, folder, update)
+      setFileUpdates(prev => ({ ...prev, [folder]: (prev[folder] ?? []).filter(u => u.filename !== update.filename) }))
+      const [files, meta] = await Promise.all([
+        window.launcher.instances.listFolder(id, folder),
+        window.launcher.instances.getFilesMeta(id, folder),
+      ])
+      setResourceFiles(prev => ({ ...prev, [folder]: files }))
+      setFilesMeta(prev => ({ ...prev, [folder]: meta.assets }))
+    } catch { /* ignore */ } finally {
+      setUpdatingFile(null)
+    }
+  }
+
+  async function handleApplyAllFileUpdates(folder: string) {
+    if (!id || updatingFile) return
+    for (const update of [...(fileUpdates[folder] ?? [])]) {
+      setUpdatingFile(update.filename)
+      try {
+        await window.launcher.instances.applyModUpdate(id, folder, update)
+        setFileUpdates(prev => ({ ...prev, [folder]: (prev[folder] ?? []).filter(u => u.filename !== update.filename) }))
+      } catch { /* continue */ }
+    }
+    setUpdatingFile(null)
+    const [files, meta] = await Promise.all([
+      window.launcher.instances.listFolder(id!, folder),
+      window.launcher.instances.getFilesMeta(id!, folder),
+    ])
+    setResourceFiles(prev => ({ ...prev, [folder]: files }))
+    setFilesMeta(prev => ({ ...prev, [folder]: meta.assets }))
+  }
+
   async function handleToggleMod(filename: string) {
     if (!id || togglingMod) return
     setTogglingMod(filename)
@@ -470,21 +579,19 @@ export default function InstanceDetailPage() {
       await window.launcher.instances.toggleMod(id, filename)
 
       // Cascade disable: if we just disabled a mod, also disable any enabled mods
-      // that list it as a dependency (BFS for transitive dependents)
+      // that list it as a dependency (BFS for transitive dependents). Supports CF and MR.
       if (isCurrentlyEnabled) {
         const cleanName = filename.replace('.jar.disabled', '.jar')
         const meta = modsMeta[cleanName] ?? modsMeta[filename]
-        const disabledModId = meta?.cfModId
 
-        if (disabledModId && disabledModId > 0) {
-          const queue = [disabledModId]
-          const visited = new Set<number>([disabledModId])
-
+        // CF cascade — keyed by cfModId (number)
+        if (meta?.cfModId && meta.cfModId > 0) {
+          const queue = [meta.cfModId]
+          const visited = new Set<number>([meta.cfModId])
           while (queue.length > 0) {
-            const currentModId = queue.shift()!
+            const currentId = queue.shift()!
             for (const [metaKey, m] of Object.entries(modsMeta)) {
-              if (!m.cfDeps?.includes(currentModId)) continue
-              if (visited.has(m.cfModId!)) continue
+              if (!m.cfDeps?.includes(currentId) || visited.has(m.cfModId!)) continue
               const enabledFile = mods.find(
                 (f) => !f.endsWith('.jar.disabled') &&
                   (f === metaKey || f.replace('.jar.disabled', '.jar') === metaKey)
@@ -493,6 +600,27 @@ export default function InstanceDetailPage() {
                 await window.launcher.instances.toggleMod(id, enabledFile)
                 visited.add(m.cfModId!)
                 queue.push(m.cfModId!)
+              }
+            }
+          }
+        }
+
+        // MR cascade — keyed by mrProjectId (string)
+        if (meta?.mrProjectId) {
+          const queue = [meta.mrProjectId]
+          const visited = new Set<string>([meta.mrProjectId])
+          while (queue.length > 0) {
+            const currentId = queue.shift()!
+            for (const [metaKey, m] of Object.entries(modsMeta)) {
+              if (!m.mrDeps?.includes(currentId) || visited.has(m.mrProjectId!)) continue
+              const enabledFile = mods.find(
+                (f) => !f.endsWith('.jar.disabled') &&
+                  (f === metaKey || f.replace('.jar.disabled', '.jar') === metaKey)
+              )
+              if (enabledFile) {
+                await window.launcher.instances.toggleMod(id, enabledFile)
+                visited.add(m.mrProjectId!)
+                queue.push(m.mrProjectId!)
               }
             }
           }
@@ -689,6 +817,16 @@ export default function InstanceDetailPage() {
                           <FolderOpen size={12} />
                           Carpeta
                         </button>
+                        {instance.modLoader !== 'vanilla' && mods.length > 0 && (
+                          <button
+                            onClick={handleCheckUpdates}
+                            disabled={checkingUpdates}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-700/60 hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors disabled:opacity-50"
+                          >
+                            <RefreshCw size={12} className={checkingUpdates ? 'animate-spin' : ''} />
+                            {checkingUpdates ? 'Comprobando…' : 'Actualizaciones'}
+                          </button>
+                        )}
                         {instance.modLoader !== 'vanilla' && (
                           <button
                             onClick={() => openCatalog('mods')}
@@ -739,6 +877,71 @@ export default function InstanceDetailPage() {
                       <div className="mx-4 mb-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs bg-purple-500/10 border border-purple-500/20 text-purple-300 shrink-0">
                         <RefreshCw size={11} className="animate-spin shrink-0" />
                         Identificando mods con {instance.source === 'modrinth' ? 'Modrinth' : 'CurseForge'}…
+                      </div>
+                    )}
+
+                    {/* Updates banner */}
+                    {!updatesDismissed && modUpdates.length > 0 && (
+                      <div className="mx-4 mb-3 rounded-xl border border-blue-500/25 bg-blue-500/8 shrink-0 overflow-hidden">
+                        <div className="flex items-center justify-between px-3 py-2 border-b border-blue-500/15">
+                          <div className="flex items-center gap-2">
+                            <Download size={12} className="text-blue-400 shrink-0" />
+                            <span className="text-xs font-medium text-blue-300">
+                              {modUpdates.length} actualización{modUpdates.length !== 1 ? 'es' : ''} disponible{modUpdates.length !== 1 ? 's' : ''}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={handleApplyAllUpdates}
+                              disabled={!!updatingMod}
+                              className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
+                            >
+                              {updatingMod ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                              Actualizar todos
+                            </button>
+                            <button onClick={() => setUpdatesDismissed(true)} className="text-gray-500 hover:text-gray-300 transition-colors">
+                              <X size={13} />
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex flex-col divide-y divide-blue-500/10 max-h-48 overflow-y-auto custom-scrollbar">
+                          {modUpdates.map(update => (
+                            <div key={update.filename} className="flex items-center justify-between px-3 py-2 gap-3">
+                              <div className="flex items-center gap-2 min-w-0">
+                                {update.logo ? (
+                                  <img src={update.logo} alt="" className="w-6 h-6 rounded object-cover shrink-0" onError={e => (e.currentTarget.style.display = 'none')} />
+                                ) : (
+                                  <div className="w-6 h-6 rounded bg-gray-700/60 shrink-0 flex items-center justify-center">
+                                    <Package size={11} className="text-gray-500" />
+                                  </div>
+                                )}
+                                <span className="text-xs text-gray-300 truncate">{update.name}</span>
+                                <span className="text-xs text-gray-600 shrink-0">{update.source === 'cf' ? 'CurseForge' : 'Modrinth'}</span>
+                              </div>
+                              <button
+                                onClick={() => handleApplyUpdate(update)}
+                                disabled={!!updatingMod}
+                                className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
+                              >
+                                {updatingMod === update.filename ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
+                                Actualizar
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* No-updates feedback */}
+                    {updatesChecked && !checkingUpdates && modUpdates.length === 0 && !updatesDismissed && (
+                      <div className="mx-4 mb-3 flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs bg-green-500/10 border border-green-500/20 text-green-300 shrink-0">
+                        <div className="flex items-center gap-2">
+                          <CheckCircle size={11} className="shrink-0" />
+                          Todos los mods están actualizados
+                        </div>
+                        <button onClick={() => setUpdatesDismissed(true)} className="text-green-600 hover:text-green-400 transition-colors">
+                          <X size={12} />
+                        </button>
                       </div>
                     )}
 
@@ -812,6 +1015,11 @@ export default function InstanceDetailPage() {
                     }
                   }
 
+                  const folderUpdates = fileUpdates[resourceTab] ?? []
+                  const isCheckingThis = checkingFileUpdates === resourceTab
+                  const thisChecked = fileUpdatesChecked[resourceTab] ?? false
+                  const thisDismissed = fileUpdatesDismissed[resourceTab] ?? false
+
                   return (
                     <>
                       <div className="flex items-center justify-between px-4 pt-3 pb-3 shrink-0">
@@ -824,6 +1032,16 @@ export default function InstanceDetailPage() {
                             <FolderOpen size={12} />
                             Carpeta
                           </button>
+                          {files.length > 0 && (
+                            <button
+                              onClick={() => handleCheckFileUpdates(resourceTab)}
+                              disabled={!!checkingFileUpdates}
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-gray-700/60 hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-colors disabled:opacity-50"
+                            >
+                              <RefreshCw size={12} className={isCheckingThis ? 'animate-spin' : ''} />
+                              {isCheckingThis ? 'Comprobando…' : 'Actualizaciones'}
+                            </button>
+                          )}
                           {instance.modLoader !== 'vanilla' && (
                             <button
                               onClick={() => openCatalog(resourceTab)}
@@ -841,6 +1059,71 @@ export default function InstanceDetailPage() {
                         <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs bg-purple-500/10 border border-purple-500/20 text-purple-300 shrink-0">
                           <RefreshCw size={11} className="animate-spin shrink-0" />
                           Identificando archivos con {instance.source === 'modrinth' ? 'Modrinth' : 'CurseForge'}…
+                        </div>
+                      )}
+
+                      {/* Updates banner */}
+                      {!thisDismissed && folderUpdates.length > 0 && (
+                        <div className="mb-3 rounded-xl border border-blue-500/25 bg-blue-500/8 shrink-0 overflow-hidden">
+                          <div className="flex items-center justify-between px-3 py-2 border-b border-blue-500/15">
+                            <div className="flex items-center gap-2">
+                              <Download size={12} className="text-blue-400 shrink-0" />
+                              <span className="text-xs font-medium text-blue-300">
+                                {folderUpdates.length} actualización{folderUpdates.length !== 1 ? 'es' : ''} disponible{folderUpdates.length !== 1 ? 's' : ''}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleApplyAllFileUpdates(resourceTab)}
+                                disabled={!!updatingFile}
+                                className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
+                              >
+                                {updatingFile ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+                                Actualizar todos
+                              </button>
+                              <button onClick={() => setFileUpdatesDismissed(prev => ({ ...prev, [resourceTab]: true }))} className="text-gray-500 hover:text-gray-300 transition-colors">
+                                <X size={13} />
+                              </button>
+                            </div>
+                          </div>
+                          <div className="flex flex-col divide-y divide-blue-500/10 max-h-48 overflow-y-auto custom-scrollbar">
+                            {folderUpdates.map(update => (
+                              <div key={update.filename} className="flex items-center justify-between px-3 py-2 gap-3">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  {update.logo ? (
+                                    <img src={update.logo} alt="" className="w-6 h-6 rounded object-cover shrink-0" onError={e => (e.currentTarget.style.display = 'none')} />
+                                  ) : (
+                                    <div className="w-6 h-6 rounded bg-gray-700/60 shrink-0 flex items-center justify-center">
+                                      <Icon size={11} className="text-gray-500" />
+                                    </div>
+                                  )}
+                                  <span className="text-xs text-gray-300 truncate">{update.name}</span>
+                                  <span className="text-xs text-gray-600 shrink-0">{update.source === 'cf' ? 'CurseForge' : 'Modrinth'}</span>
+                                </div>
+                                <button
+                                  onClick={() => handleApplyFileUpdate(resourceTab, update)}
+                                  disabled={!!updatingFile}
+                                  className="shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-medium bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
+                                >
+                                  {updatingFile === update.filename ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
+                                  Actualizar
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* No-updates feedback */}
+                      {thisChecked && !isCheckingThis && folderUpdates.length === 0 && !thisDismissed && (
+                        <div className="mb-3 flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs bg-green-500/10 border border-green-500/20 text-green-300 shrink-0">
+                          <div className="flex items-center gap-2">
+                            <CheckCircle size={11} className="shrink-0" />
+                            Todo está actualizado
+                          </div>
+                          <button onClick={() => setFileUpdatesDismissed(prev => ({ ...prev, [resourceTab]: true }))} className="text-green-600 hover:text-green-400 transition-colors">
+                            <X size={12} />
+                          </button>
                         </div>
                       )}
 

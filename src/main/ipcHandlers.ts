@@ -60,7 +60,7 @@ import {
   cfGetCategories,
 } from './services/curseforgeService'
 import { installCurseForgeModpack, installModrinthModpack, cancelInstall } from './services/modpackInstaller'
-import { installCfAsset, installCfAssetWithDeps, installMrAsset, syncAssetsJson, removeAssetMeta, identifyAssets } from './services/assetManager'
+import { installCfAsset, installCfAssetWithDeps, installMrAsset, syncAssetsJson, removeAssetMeta, identifyAssets, checkModUpdates, applyModUpdate } from './services/assetManager'
 import { launchInstance, isInstanceRunning, stopInstance } from './services/gameLauncher'
 import { mrSearch, mrGetProject, mrGetProjectVersions, mrGetVersion } from './services/modrinthService'
 import path from 'path'
@@ -269,6 +269,10 @@ export function registerIpcHandlers(): void {
   })
 
   ipcMain.handle('instances:getModsMeta', (_, instanceId: string) => syncAssetsJson(instanceId, 'mods'))
+
+  ipcMain.handle('instances:checkModUpdates', (_, instanceId: string, folder: string) => checkModUpdates(instanceId, folder))
+
+  ipcMain.handle('instances:applyModUpdate', (_, instanceId: string, folder: string, update: any) => applyModUpdate(instanceId, folder, update))
 
   ipcMain.handle('instances:identifyMods', async (_, instanceId: string) => {
     const win = getMainWindow()

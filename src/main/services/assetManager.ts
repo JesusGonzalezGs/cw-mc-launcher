@@ -30,7 +30,6 @@ export interface AssetMeta {
   slug: string
   logo?: string
   summary?: string
-  gameVersions?: string[]
   // CurseForge
   cfModId?: number
   cfFileId?: number
@@ -40,6 +39,8 @@ export interface AssetMeta {
   mrProjectId?: string
   mrVersionId?: string
   mrSlug?: string
+  /** Required MR dependency project IDs (used for cascade disable) */
+  mrDeps?: string[]
   /**
    * Identification state for files dropped directly into the folder:
    *   undefined = pending (will be checked on next identify run)
@@ -50,7 +51,20 @@ export interface AssetMeta {
 }
 
 export interface AssetsJson {
+  version: 1
   assets: Record<string, AssetMeta>
+}
+
+export interface ModUpdateInfo {
+  filename: string
+  name: string
+  logo?: string
+  source: 'cf' | 'mr'
+  cfModId?: number
+  latestCfFileId?: number
+  mrSlug?: string
+  mrProjectId?: string
+  latestMrVersionId?: string
 }
 
 export interface CfInstallResult {
@@ -71,7 +85,6 @@ function migrateOldRecord(old: any): AssetMeta {
     slug: old.mrSlug ?? old.slug ?? '',
     logo: old.logo,
     summary: old.summary,
-    gameVersions: old.gameVersions,
     recognized: old.recognized,
   }
   if (hasCfId) {
@@ -93,10 +106,10 @@ function parseRawJson(raw: any): AssetsJson {
     if (legacyKey && typeof legacyKey === 'object') {
       const assets: Record<string, AssetMeta> = {}
       for (const [k, v] of Object.entries(legacyKey)) assets[k] = migrateOldRecord(v)
-      return { assets }
+      return { version: 1, assets }
     }
   }
-  return { assets: {} }
+  return { version: 1, assets: {} }
 }
 
 // ── Storage helpers ───────────────────────────────────────────────────────────
@@ -107,12 +120,12 @@ export function getAssetsJsonPath(instanceId: string, folder: string): string {
 
 export function readAssetsJson(instanceId: string, folder: string): AssetsJson {
   const p = getAssetsJsonPath(instanceId, folder)
-  if (!fs.existsSync(p)) return { assets: {} }
-  try { return parseRawJson(JSON.parse(fs.readFileSync(p, 'utf-8'))) } catch { return { assets: {} } }
+  if (!fs.existsSync(p)) return { version: 1, assets: {} }
+  try { return parseRawJson(JSON.parse(fs.readFileSync(p, 'utf-8'))) } catch { return { version: 1, assets: {} } }
 }
 
 export function writeAssetsJson(instanceId: string, folder: string, data: AssetsJson): void {
-  fs.writeFileSync(getAssetsJsonPath(instanceId, folder), JSON.stringify(data, null, 2))
+  fs.writeFileSync(getAssetsJsonPath(instanceId, folder), JSON.stringify({ version: 1, ...data }, null, 2))
 }
 
 /**
@@ -126,8 +139,8 @@ export function syncAssetsJson(instanceId: string, folder: string): AssetsJson {
 
   if (!fs.existsSync(dir)) {
     if (Object.keys(json.assets).length > 0) {
-      writeAssetsJson(instanceId, folder, { assets: {} })
-      return { assets: {} }
+      writeAssetsJson(instanceId, folder, { version: 1, assets: {} })
+      return { version: 1, assets: {} }
     }
     return json
   }
@@ -203,7 +216,7 @@ async function installCfSingle(
   await downloadFile(url, path.join(dir, filename))
 
   // Pre-write minimal metadata so the FS watcher doesn't trigger identifyAssets
-  json.assets[filename] = { source: 'cf', cfModId: modId, cfFileId: fileId, name: filename.replace(enabled, ''), slug: '', gameVersions: [], recognized: true }
+  json.assets[filename] = { source: 'cf', cfModId: modId, cfFileId: fileId, name: filename.replace(enabled, ''), slug: '', recognized: true }
   writeAssetsJson(instanceId, folder, json)
 
   // Enrich with full metadata from API (best-effort)
@@ -218,7 +231,7 @@ async function installCfSingle(
       json.assets[filename] = {
         source: 'cf', cfModId: modId, cfFileId: fileId,
         name, slug: mod.slug ?? '', logo: mod.logo?.thumbnailUrl, summary: mod.summary,
-        gameVersions: file?.gameVersions ?? [], cfDeps, recognized: true,
+        cfDeps, recognized: true,
       }
     }
   } catch { /* metadata optional */ }
@@ -442,7 +455,6 @@ async function _identifyMrHash(
       mrSlug: project?.slug,
       logo: project?.icon_url,
       summary: project?.description,
-      gameVersions: version.game_versions ?? [],
       recognized: true,
     }
     if (filename !== cleanName) delete json.assets[filename]
@@ -489,7 +501,6 @@ async function _identifyCfFingerprint(
     matchedFps.add(fp)
     const cfModId: number = match.id
     const cfFileId: number = match.file?.id ?? 0
-    const gameVersions: string[] = match.file?.gameVersions ?? []
     const cfDeps: number[] = (match.file?.dependencies ?? []).filter((d: any) => d.relationType === 3).map((d: any) => d.modId as number)
     let name = entry.cleanName.replace(ext, ''), slug = '', logo: string | undefined, summary: string | undefined
     try {
@@ -498,7 +509,7 @@ async function _identifyCfFingerprint(
     } catch { /* use filename as name */ }
     json.assets[entry.cleanName] = {
       ...(json.assets[entry.cleanName] ?? {}),
-      source: 'cf', cfModId, cfFileId, name, slug, logo, summary, gameVersions, cfDeps, recognized: true,
+      source: 'cf', cfModId, cfFileId, name, slug, logo, summary, cfDeps, recognized: true,
     }
     if (entry.filename !== entry.cleanName) delete json.assets[entry.filename]
   }
@@ -516,6 +527,62 @@ async function _identifyCfFingerprint(
 }
 
 // ── Modrinth install ──────────────────────────────────────────────────────────
+
+// ── Update checking ───────────────────────────────────────────────────────────
+
+export async function checkModUpdates(instanceId: string, folder: string = 'mods'): Promise<ModUpdateInfo[]> {
+  const instance = getInstance(instanceId)
+  if (!instance) throw new Error('Instancia no encontrada')
+
+  const json = readAssetsJson(instanceId, folder)
+  const updates: ModUpdateInfo[] = []
+  // Only filter by loader for mods — resourcepacks/shaderpacks/datapacks are loader-agnostic
+  const applyLoaderFilter = folder === 'mods'
+
+  // CF — batch request with latestFilesIndexes
+  const cfEntries = Object.entries(json.assets).filter(([, m]) => m.source === 'cf' && (m.cfModId ?? 0) > 0)
+  if (cfEntries.length > 0) {
+    const cfModIds = cfEntries.map(([, m]) => m.cfModId as number)
+    const modsBatch = await cfGetModsBatch(cfModIds).catch(() => ({} as Record<number, any>))
+    const loaderTypeId: number | undefined = applyLoaderFilter ? LOADER_TYPE_MAP[instance.modLoader] : undefined
+    for (const [filename, meta] of cfEntries) {
+      const mod = modsBatch[meta.cfModId!]
+      if (!mod) continue
+      const indexes: any[] = mod.latestFilesIndexes ?? []
+      const forVersion = indexes.filter((f: any) => f.gameVersion === instance.mcVersion)
+      const withLoader = loaderTypeId ? forVersion.filter((f: any) => f.modLoader === loaderTypeId) : forVersion
+      const best = (withLoader.length > 0 ? withLoader : forVersion)[0]
+      if (!best || best.fileId === meta.cfFileId) continue
+      updates.push({ filename, name: meta.name, logo: meta.logo, source: 'cf', cfModId: meta.cfModId, latestCfFileId: best.fileId })
+    }
+  }
+
+  // MR — parallel version fetch per project
+  const mrEntries = Object.entries(json.assets).filter(([, m]) => m.source === 'mr' && m.mrProjectId)
+  if (mrEntries.length > 0) {
+    const gameVersions = instance.mcVersion ? [instance.mcVersion] : undefined
+    const loaders = applyLoaderFilter && instance.modLoader && instance.modLoader !== 'vanilla' ? [instance.modLoader] : undefined
+    await Promise.allSettled(
+      mrEntries.map(async ([filename, meta]) => {
+        try {
+          const versions = await mrGetProjectVersions(meta.mrProjectId!, gameVersions, loaders)
+          if (versions.length === 0 || versions[0].id === meta.mrVersionId) return
+          updates.push({ filename, name: meta.name, logo: meta.logo, source: 'mr', mrProjectId: meta.mrProjectId, mrSlug: meta.mrSlug, latestMrVersionId: versions[0].id })
+        } catch { /* skip */ }
+      })
+    )
+  }
+
+  return updates
+}
+
+export async function applyModUpdate(instanceId: string, folder: string = 'mods', update: ModUpdateInfo): Promise<void> {
+  if (update.source === 'cf') {
+    await installCfAsset(instanceId, folder, update.cfModId!, update.latestCfFileId!)
+  } else {
+    await installMrAsset(instanceId, update.latestMrVersionId!, folder, update.mrSlug)
+  }
+}
 
 export interface MrInstallResult {
   ok: boolean
@@ -566,8 +633,7 @@ async function _installMrAssetInternal(
     if (!preJson.assets[primaryFile.filename]) {
       preJson.assets[primaryFile.filename] = {
         source: 'mr', name: mrSlug, slug: mrSlug,
-        mrVersionId: version.id, gameVersions: version.game_versions ?? [],
-        recognized: true,
+        mrVersionId: version.id, recognized: true,
       }
       writeAssetsJson(instanceId, folder, preJson)
     }
@@ -593,10 +659,14 @@ async function _installMrAssetInternal(
       delete json.assets[clean]
       delete json.assets[clean.replace(enabled, disabled)]
     }
+    const mrDeps: string[] = (version.dependencies ?? [])
+      .filter((d: any) => d.dependency_type === 'required' && d.project_id)
+      .map((d: any) => d.project_id as string)
     json.assets[primaryFile.filename] = {
       source: 'mr', mrProjectId, mrVersionId: version.id, mrSlug,
       name: projectTitle, slug: mrSlug, logo, summary,
-      gameVersions: version.game_versions ?? [], recognized: true,
+      ...(mrDeps.length > 0 ? { mrDeps } : {}),
+      recognized: true,
     }
     writeAssetsJson(instanceId, folder, json)
   }

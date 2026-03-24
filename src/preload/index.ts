@@ -73,6 +73,8 @@ contextBridge.exposeInMainWorld('launcher', {
     launch: (instance: any) => ipcRenderer.invoke('instances:launch', instance),
     getMods: (id: string) => ipcRenderer.invoke('instances:getMods', id),
     getModsMeta: (id: string) => ipcRenderer.invoke('instances:getModsMeta', id),
+    checkModUpdates: (id: string, folder: string) => ipcRenderer.invoke('instances:checkModUpdates', id, folder),
+    applyModUpdate: (id: string, folder: string, update: any) => ipcRenderer.invoke('instances:applyModUpdate', id, folder, update),
     toggleMod: (id: string, filename: string) => ipcRenderer.invoke('instances:toggleMod', id, filename),
     removeMod: (id: string, filename: string) => ipcRenderer.invoke('instances:removeMod', id, filename),
     identifyMods: (instanceId: string) =>
