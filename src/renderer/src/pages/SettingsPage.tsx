@@ -206,7 +206,7 @@ export default function SettingsPage({ launcherUser, onAccountChange, onLogoutGo
                   {acc.id !== settings.activeAccountId && (
                     <button
                       onClick={() => handleSetActive(acc.id)}
-                      className="text-xs text-gray-500 hover:text-purple-400 transition-colors"
+                      className="text-xs px-2.5 py-1 rounded-lg border border-purple-500/30 text-purple-400 hover:bg-purple-500/15 hover:border-purple-400/50 hover:text-purple-300 transition-all"
                     >
                       Activar
                     </button>
