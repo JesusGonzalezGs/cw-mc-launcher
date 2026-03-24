@@ -9,6 +9,7 @@ import type { CfMod, CfFile } from '../types'
 import { CF_LOADER_ID_TO_NAME, CF_LOADER_BADGE_COLORS, DEFAULT_LOADER_BADGE_COLOR } from '../constants'
 import { useInstall } from '../context/InstallContext'
 import { mrGetProject, mrGetProjectVersions } from '../api/mrApi'
+import { marked } from 'marked'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -620,14 +621,10 @@ export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
           {tab === 'descripcion' && (
             data.description ? (
               <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40">
-                {data.descriptionIsHtml ? (
-                  <div
-                    className={`prose prose-invert prose-sm max-w-none text-gray-300 [&_img]:max-w-full ${theme.descLink} [&_a]:no-underline`}
-                    dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.description) }}
-                  />
-                ) : (
-                  <pre className="whitespace-pre-wrap text-sm text-gray-300 leading-relaxed font-sans">{data.description}</pre>
-                )}
+                <div
+                  className={`prose prose-invert prose-sm max-w-none text-gray-300 [&_img]:max-w-full ${theme.descLink} [&_a]:no-underline`}
+                  dangerouslySetInnerHTML={{ __html: sanitizeHtml(data.descriptionIsHtml ? data.description : marked(data.description) as string) }}
+                />
               </div>
             ) : <p className="text-sm text-gray-500">Sin descripción disponible.</p>
           )}
@@ -837,9 +834,10 @@ export default function ModpackDetailPage({ source }: { source: 'cf' | 'mr' }) {
                 )}
                 {mrChangelog ? (
                   <div className="rounded-xl p-4 bg-gray-800/60 border border-gray-700/40">
-                    <pre className={`prose prose-invert prose-sm max-w-none text-gray-300 whitespace-pre-wrap font-sans text-sm leading-relaxed ${theme.descLink}`}>
-                      {mrChangelog}
-                    </pre>
+                    <div
+                      className={`prose prose-invert prose-sm max-w-none text-gray-300 [&_img]:max-w-full ${theme.descLink} [&_a]:no-underline`}
+                      dangerouslySetInnerHTML={{ __html: sanitizeHtml(marked(mrChangelog) as string) }}
+                    />
                   </div>
                 ) : <p className="text-sm text-gray-500">Sin changelog disponible para esta versión.</p>}
               </div>

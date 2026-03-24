@@ -72,7 +72,7 @@ function EmptyListState({ icon: Icon, message, note, onCatalog, catalogLabel = '
   )
 }
 
-function ResourceRow({ name, displayName, logo, recognized, enabled, isToggling, disabledAny, fallbackIcon: FallbackIcon, onToggle, onDelete, onOpen }: {
+function ResourceRow({ name, displayName, logo, recognized, enabled, isToggling, disabledAny, fallbackIcon: FallbackIcon, onToggle, onDelete, onOpen, update, onUpdate, onChangelogUpdate, isUpdating }: {
   name: string
   displayName: string
   logo?: string
@@ -84,9 +84,13 @@ function ResourceRow({ name, displayName, logo, recognized, enabled, isToggling,
   onToggle: () => void
   onDelete: () => void
   onOpen?: () => void
+  update?: ModUpdateInfo
+  onUpdate?: () => void
+  onChangelogUpdate?: () => void
+  isUpdating?: boolean
 }) {
   return (
-    <div className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl border transition-all ${!enabled ? 'opacity-55 border-gray-700/30' : 'border-gray-700/40 hover:border-gray-600/60 hover:bg-gray-700/20'}`}>
+    <div className={`flex items-center gap-2.5 px-2.5 py-2 rounded-xl border transition-all ${update ? 'border-blue-500/40 bg-blue-500/6 hover:border-blue-400/60' : !enabled ? 'opacity-55 border-gray-700/30' : 'border-gray-700/40 hover:border-gray-600/60 hover:bg-gray-700/20'}`}>
       <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center overflow-hidden ${logo ? '' : recognized === false ? 'bg-gray-700/70' : 'bg-purple-500/15'}`}>
         {logo ? (
           <img src={logo} alt="" className="w-full h-full object-cover" onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
@@ -109,6 +113,32 @@ function ResourceRow({ name, displayName, logo, recognized, enabled, isToggling,
           {recognized === false && <span className="text-[10px] text-gray-600 shrink-0">· no reconocido</span>}
         </div>
       </div>
+      {update && (
+        <div className="flex items-center gap-1 shrink-0">
+          {update.releaseType !== 'release' && (
+            <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded shrink-0 ${update.releaseType === 'beta' ? 'bg-yellow-500/15 text-yellow-400' : 'bg-red-500/15 text-red-400'}`}>
+              {update.releaseType === 'beta' ? 'Beta' : 'Alpha'}
+            </span>
+          )}
+          {(update.source === 'cf' ? update.latestCfFileId : update.latestMrVersionId) ? (
+            <button
+              title="Changelog de la actualización"
+              onClick={onChangelogUpdate}
+              className="p-1.5 rounded-lg text-blue-400 hover:text-blue-200 hover:bg-blue-700/20 transition-colors"
+            >
+              <ScrollText size={13} />
+            </button>
+          ) : null}
+          <button
+            onClick={onUpdate}
+            disabled={isUpdating || disabledAny}
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50 disabled:cursor-wait"
+          >
+            {isUpdating ? <Loader2 size={11} className="animate-spin" /> : <Download size={11} />}
+            Actualizar
+          </button>
+        </div>
+      )}
       <button
         onClick={onToggle}
         disabled={disabledAny}
@@ -764,6 +794,18 @@ export default function InstanceDetailPage() {
     return list
   }, [mods, modsMeta, modSearch, modSort])
 
+  const modUpdateMap = useMemo(
+    () => new Map(modUpdates.map(u => [u.filename, u])),
+    [modUpdates]
+  )
+
+  const displayMods = useMemo(() => {
+    if (!modUpdates.length) return filteredMods
+    const withUpdates = filteredMods.filter(f => modUpdateMap.has(f))
+    const withoutUpdates = filteredMods.filter(f => !modUpdateMap.has(f))
+    return [...withUpdates, ...withoutUpdates]
+  }, [filteredMods, modUpdates, modUpdateMap])
+
   if (!instance) return null
 
   const loaderName = LOADER_NAMES[instance.modLoader] ?? instance.modLoader
@@ -902,6 +944,16 @@ export default function InstanceDetailPage() {
                             {checkingUpdates ? 'Comprobando…' : 'Actualizaciones'}
                           </button>
                         )}
+                        {modUpdates.length > 0 && (
+                          <button
+                            onClick={handleApplyAllUpdates}
+                            disabled={!!updatingMod}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
+                          >
+                            {updatingMod ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                            Actualizar todos ({modUpdates.length})
+                          </button>
+                        )}
                         {instance.modLoader !== 'vanilla' && (
                           <button
                             onClick={() => openCatalog('mods')}
@@ -955,81 +1007,6 @@ export default function InstanceDetailPage() {
                       </div>
                     )}
 
-                    {/* Updates banner */}
-                    {!updatesDismissed && modUpdates.length > 0 && (
-                      <div className="mx-4 mb-3 rounded-xl border border-blue-500/25 bg-blue-500/8 shrink-0 overflow-hidden">
-                        <div className="flex items-center justify-between px-4 py-2.5 border-b border-blue-500/15">
-                          <div className="flex items-center gap-2">
-                            <Download size={14} className="text-blue-400 shrink-0" />
-                            <span className="text-sm font-medium text-blue-300">
-                              {modUpdates.length} actualización{modUpdates.length !== 1 ? 'es' : ''} disponible{modUpdates.length !== 1 ? 's' : ''}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={handleApplyAllUpdates}
-                              disabled={!!updatingMod}
-                              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
-                            >
-                              {updatingMod ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
-                              Actualizar todos
-                            </button>
-                            <button onClick={() => setUpdatesDismissed(true)} className="text-gray-500 hover:text-gray-300 transition-colors">
-                              <X size={15} />
-                            </button>
-                          </div>
-                        </div>
-                        <div className="flex flex-col divide-y divide-blue-500/10 max-h-64 overflow-y-auto custom-scrollbar">
-                          {modUpdates.map(update => (
-                            <div key={update.filename} className="flex items-center justify-between px-4 py-3 gap-3">
-                              <div className="flex items-center gap-3 min-w-0">
-                                {update.logo ? (
-                                  <img src={update.logo} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0" onError={e => (e.currentTarget.style.display = 'none')} />
-                                ) : (
-                                  <div className="w-9 h-9 rounded-lg bg-gray-700/60 shrink-0 flex items-center justify-center">
-                                    <Package size={15} className="text-gray-500" />
-                                  </div>
-                                )}
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="text-sm text-gray-200 truncate font-medium">{update.name}</span>
-                                    {update.releaseType !== 'release' && (
-                                      <span className={`text-xs font-medium px-1.5 py-0.5 rounded shrink-0 ${update.releaseType === 'beta' ? 'bg-yellow-500/15 text-yellow-400' : 'bg-red-500/15 text-red-400'}`}>
-                                        {update.releaseType === 'beta' ? 'Beta' : 'Alpha'}
-                                      </span>
-                                    )}
-                                  </div>
-                                  <span className="text-xs text-gray-600">{update.source === 'cf' ? 'CurseForge' : 'Modrinth'}</span>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-1.5 shrink-0">
-                                {(update.source === 'cf' ? update.latestCfFileId : update.latestMrVersionId) ? (
-                                  <button
-                                    title="Changelog de la actualización"
-                                    onClick={() => setChangelogMeta(update.source === 'cf'
-                                      ? { source: 'cf', name: update.name, logo: update.logo, slug: '', cfModId: update.cfModId, cfFileId: update.latestCfFileId }
-                                      : { source: 'mr', name: update.name, logo: update.logo, slug: '', mrVersionId: update.latestMrVersionId }
-                                    )}
-                                    className="p-1.5 rounded-lg text-blue-400 hover:text-blue-200 hover:bg-blue-700/20 transition-colors"
-                                  >
-                                    <ScrollText size={14} />
-                                  </button>
-                                ) : null}
-                                <button
-                                  onClick={() => handleApplyUpdate(update)}
-                                  disabled={!!updatingMod}
-                                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
-                                >
-                                  {updatingMod === update.filename ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
-                                  Actualizar
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
                     {/* No-updates feedback */}
                     {updatesChecked && !checkingUpdates && modUpdates.length === 0 && !updatesDismissed && (
                       <div className="mx-4 mb-3 flex items-center justify-between gap-2 px-3 py-2 rounded-xl text-xs bg-green-500/10 border border-green-500/20 text-green-300 shrink-0">
@@ -1045,7 +1022,7 @@ export default function InstanceDetailPage() {
 
                     {/* Mod list */}
                     <div className="overflow-y-auto px-4 pb-4 custom-scrollbar max-h-[460px] min-h-[140px]">
-                      {filteredMods.length === 0 ? (
+                      {displayMods.length === 0 ? (
                         mods.length === 0 ? (
                           <EmptyListState
                             icon={Package}
@@ -1062,10 +1039,11 @@ export default function InstanceDetailPage() {
                         )
                       ) : (
                         <div className="flex flex-col gap-1">
-                          {filteredMods.map((filename) => {
+                          {displayMods.map((filename) => {
                             const enabled = !filename.endsWith('.jar.disabled')
                             const cleanName = filename.replace('.jar.disabled', '.jar')
                             const meta = modsMeta[cleanName] ?? modsMeta[filename]
+                            const update = modUpdateMap.get(filename)
                             return (
                               <ResourceRow
                                 key={filename}
@@ -1080,6 +1058,13 @@ export default function InstanceDetailPage() {
                                 onToggle={() => handleToggleMod(filename)}
                                 onDelete={() => setModToDelete(filename)}
                                 onOpen={(meta?.mrSlug || (meta?.cfModId ?? 0) > 0) ? () => openItemDetail(meta, 'mods') : undefined}
+                                update={update}
+                                onUpdate={update ? () => handleApplyUpdate(update) : undefined}
+                                onChangelogUpdate={update ? () => setChangelogMeta(update.source === 'cf'
+                                  ? { source: 'cf', name: update.name, logo: update.logo, slug: '', cfModId: update.cfModId, cfFileId: update.latestCfFileId }
+                                  : { source: 'mr', name: update.name, logo: update.logo, slug: '', mrVersionId: update.latestMrVersionId }
+                                ) : undefined}
+                                isUpdating={updatingMod === filename}
                               />
                             )
                           })}
@@ -1117,6 +1102,10 @@ export default function InstanceDetailPage() {
                   const isCheckingThis = checkingFileUpdates === resourceTab
                   const thisChecked = fileUpdatesChecked[resourceTab] ?? false
                   const thisDismissed = fileUpdatesDismissed[resourceTab] ?? false
+                  const fileUpdateMap = new Map(folderUpdates.map(u => [u.filename, u]))
+                  const displayFiles = folderUpdates.length
+                    ? [...files.filter(f => fileUpdateMap.has(f.name)), ...files.filter(f => !fileUpdateMap.has(f.name))]
+                    : files
 
                   return (
                     <>
@@ -1140,6 +1129,16 @@ export default function InstanceDetailPage() {
                               {isCheckingThis ? 'Comprobando…' : 'Actualizaciones'}
                             </button>
                           )}
+                          {folderUpdates.length > 0 && (
+                            <button
+                              onClick={() => handleApplyAllFileUpdates(resourceTab)}
+                              disabled={!!updatingFile}
+                              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
+                            >
+                              {updatingFile ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
+                              Actualizar todos ({folderUpdates.length})
+                            </button>
+                          )}
                           {instance.modLoader !== 'vanilla' && (
                             <button
                               onClick={() => openCatalog(resourceTab)}
@@ -1157,81 +1156,6 @@ export default function InstanceDetailPage() {
                         <div className="mb-3 flex items-center gap-2 px-3 py-2 rounded-xl text-xs bg-purple-500/10 border border-purple-500/20 text-purple-300 shrink-0">
                           <RefreshCw size={11} className="animate-spin shrink-0" />
                           Identificando archivos con {instance.source === 'modrinth' ? 'Modrinth' : 'CurseForge'}…
-                        </div>
-                      )}
-
-                      {/* Updates banner */}
-                      {!thisDismissed && folderUpdates.length > 0 && (
-                        <div className="mb-3 rounded-xl border border-blue-500/25 bg-blue-500/8 shrink-0 overflow-hidden">
-                          <div className="flex items-center justify-between px-4 py-2.5 border-b border-blue-500/15">
-                            <div className="flex items-center gap-2">
-                              <Download size={14} className="text-blue-400 shrink-0" />
-                              <span className="text-sm font-medium text-blue-300">
-                                {folderUpdates.length} actualización{folderUpdates.length !== 1 ? 'es' : ''} disponible{folderUpdates.length !== 1 ? 's' : ''}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => handleApplyAllFileUpdates(resourceTab)}
-                                disabled={!!updatingFile}
-                                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/20 hover:bg-blue-500/30 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
-                              >
-                                {updatingFile ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
-                                Actualizar todos
-                              </button>
-                              <button onClick={() => setFileUpdatesDismissed(prev => ({ ...prev, [resourceTab]: true }))} className="text-gray-500 hover:text-gray-300 transition-colors">
-                                <X size={15} />
-                              </button>
-                            </div>
-                          </div>
-                          <div className="flex flex-col divide-y divide-blue-500/10 max-h-64 overflow-y-auto custom-scrollbar">
-                            {folderUpdates.map(update => (
-                              <div key={update.filename} className="flex items-center justify-between px-4 py-3 gap-3">
-                                <div className="flex items-center gap-3 min-w-0">
-                                  {update.logo ? (
-                                    <img src={update.logo} alt="" className="w-9 h-9 rounded-lg object-cover shrink-0" onError={e => (e.currentTarget.style.display = 'none')} />
-                                  ) : (
-                                    <div className="w-9 h-9 rounded-lg bg-gray-700/60 shrink-0 flex items-center justify-center">
-                                      <Icon size={15} className="text-gray-500" />
-                                    </div>
-                                  )}
-                                  <div className="min-w-0">
-                                    <div className="flex items-center gap-1.5 flex-wrap">
-                                      <span className="text-sm text-gray-200 truncate font-medium">{update.name}</span>
-                                      {update.releaseType !== 'release' && (
-                                        <span className={`text-xs font-medium px-1.5 py-0.5 rounded shrink-0 ${update.releaseType === 'beta' ? 'bg-yellow-500/15 text-yellow-400' : 'bg-red-500/15 text-red-400'}`}>
-                                          {update.releaseType === 'beta' ? 'Beta' : 'Alpha'}
-                                        </span>
-                                      )}
-                                    </div>
-                                    <span className="text-xs text-gray-600">{update.source === 'cf' ? 'CurseForge' : 'Modrinth'}</span>
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-1.5 shrink-0">
-                                  {(update.source === 'cf' ? update.latestCfFileId : update.latestMrVersionId) ? (
-                                    <button
-                                      title="Changelog de la actualización"
-                                      onClick={() => setChangelogMeta(update.source === 'cf'
-                                        ? { source: 'cf', name: update.name, logo: update.logo, slug: '', cfModId: update.cfModId, cfFileId: update.latestCfFileId }
-                                        : { source: 'mr', name: update.name, logo: update.logo, slug: '', mrVersionId: update.latestMrVersionId }
-                                      )}
-                                      className="p-1.5 rounded-lg text-blue-400 hover:text-blue-200 hover:bg-blue-700/20 transition-colors"
-                                    >
-                                      <ScrollText size={14} />
-                                    </button>
-                                  ) : null}
-                                  <button
-                                    onClick={() => handleApplyFileUpdate(resourceTab, update)}
-                                    disabled={!!updatingFile}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-blue-500/15 hover:bg-blue-500/25 text-blue-300 hover:text-blue-200 transition-colors disabled:opacity-50"
-                                  >
-                                    {updatingFile === update.filename ? <Loader2 size={12} className="animate-spin" /> : <Download size={12} />}
-                                    Actualizar
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
                         </div>
                       )}
 
@@ -1262,10 +1186,11 @@ export default function InstanceDetailPage() {
                           />
                         ) : (
                           <div className="flex flex-col gap-1 py-1">
-                            {files.map(entry => {
+                            {displayFiles.map(entry => {
                               const isDisabled = entry.name.endsWith('.disabled')
                               const rawName = isDisabled ? entry.name.slice(0, -'.disabled'.length) : entry.name
                               const meta = filesMeta[resourceTab]?.[rawName] ?? filesMeta[resourceTab]?.[entry.name]
+                              const fileUpdate = fileUpdateMap.get(entry.name)
                               return (
                                 <ResourceRow
                                   key={entry.name}
@@ -1281,6 +1206,13 @@ export default function InstanceDetailPage() {
                                   onOpen={(meta?.mrSlug || (meta?.cfModId ?? 0) > 0) ? () => openItemDetail(meta, resourceTab) : undefined}
                                   onDelete={() => window.launcher.instances.deleteFile(id!, resourceTab, entry.name)
                                     .then(() => setResourceFiles(prev => ({ ...prev, [resourceTab]: prev[resourceTab].filter(f => f.name !== entry.name) })))}
+                                  update={fileUpdate}
+                                  onUpdate={fileUpdate ? () => handleApplyFileUpdate(resourceTab, fileUpdate) : undefined}
+                                  onChangelogUpdate={fileUpdate ? () => setChangelogMeta(fileUpdate.source === 'cf'
+                                    ? { source: 'cf', name: fileUpdate.name, logo: fileUpdate.logo, slug: '', cfModId: fileUpdate.cfModId, cfFileId: fileUpdate.latestCfFileId }
+                                    : { source: 'mr', name: fileUpdate.name, logo: fileUpdate.logo, slug: '', mrVersionId: fileUpdate.latestMrVersionId }
+                                  ) : undefined}
+                                  isUpdating={updatingFile === entry.name}
                                 />
                               )
                             })}
