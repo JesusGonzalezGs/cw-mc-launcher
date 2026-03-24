@@ -13,7 +13,7 @@ import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
 import { getInstanceDir, getModsDir, getInstance } from './instanceManager'
-import { cfGetFileDetails, cfGetModFiles, cfGetMod, cfGetDownloadUrl, cfFingerprint, cfGetFingerprintMatches } from './curseforgeService'
+import { cfGetFileDetails, cfGetModFiles, cfGetMod, cfGetModsBatch, cfGetDownloadUrl, cfFingerprint, cfGetFingerprintMatches } from './curseforgeService'
 import { mrGetVersion, mrGetProject, mrGetProjectVersions } from './modrinthService'
 import { downloadFile } from '../utils/downloadHelper'
 
@@ -56,7 +56,7 @@ export interface AssetsJson {
 export interface CfInstallResult {
   filename: string
   depsInstalled: { filename: string; name: string }[]
-  depsFailed: { modId: number; error: string }[]
+  depsFailed: { modId: number; name?: string; error: string }[]
 }
 
 // ── Migration from old mods.json / files.json format ─────────────────────────
@@ -113,6 +113,38 @@ export function readAssetsJson(instanceId: string, folder: string): AssetsJson {
 
 export function writeAssetsJson(instanceId: string, folder: string, data: AssetsJson): void {
   fs.writeFileSync(getAssetsJsonPath(instanceId, folder), JSON.stringify(data, null, 2))
+}
+
+/**
+ * Removes stale entries from the assets JSON — entries whose file no longer
+ * exists on disk (checked against both enabled and disabled variants).
+ * Writes back only if something changed. Returns the clean JSON.
+ */
+export function syncAssetsJson(instanceId: string, folder: string): AssetsJson {
+  const json = readAssetsJson(instanceId, folder)
+  const dir = getFolderDir(instanceId, folder)
+
+  if (!fs.existsSync(dir)) {
+    if (Object.keys(json.assets).length > 0) {
+      writeAssetsJson(instanceId, folder, { assets: {} })
+      return { assets: {} }
+    }
+    return json
+  }
+
+  const onDisk = new Set(fs.readdirSync(dir))
+  let dirty = false
+
+  for (const key of Object.keys(json.assets)) {
+    const cleanKey = key.endsWith('.disabled') ? key.slice(0, -'.disabled'.length) : key
+    if (!onDisk.has(cleanKey) && !onDisk.has(cleanKey + '.disabled')) {
+      delete json.assets[key]
+      dirty = true
+    }
+  }
+
+  if (dirty) writeAssetsJson(instanceId, folder, json)
+  return json
 }
 
 export function removeAssetMeta(instanceId: string, folder: string, filename: string): void {
@@ -219,22 +251,82 @@ export async function installCfAssetWithDeps(
 
   const { filename } = await installCfSingle(instanceId, 'mods', modId, fileId, json, onProgress)
 
-  const requiredDepIds: number[] = json.assets[filename]?.cfDeps ?? []
-  const depsInstalled: { filename: string; name: string }[] = []
-  const depsFailed: { modId: number; error: string }[] = []
+  // Get required deps for the main file.
+  // Prefer cfDeps already set by installCfSingle's enrichment.
+  // If that failed (best-effort catch), fetch explicitly so deps are never silently lost.
+  let mainDeps: number[] = json.assets[filename]?.cfDeps ?? []
+  if (mainDeps.length === 0) {
+    try {
+      const fileData = (await cfGetFileDetails(modId, fileId)) as any
+      mainDeps = (fileData?.data?.dependencies ?? [])
+        .filter((d: any) => d.relationType === 3)
+        .map((d: any) => d.modId as number)
+      if (mainDeps.length > 0 && json.assets[filename]) {
+        json.assets[filename].cfDeps = mainDeps
+      }
+    } catch { /* truly no deps */ }
+  }
 
-  for (const depModId of requiredDepIds) {
+  const depsInstalled: { filename: string; name: string }[] = []
+  const depsFailed: { modId: number; name?: string; error: string }[] = []
+
+  // BFS: resolve transitive dependencies
+  const seen = new Set<number>([modId])
+  const queue: number[] = [...mainDeps]
+
+  while (queue.length > 0) {
+    const depModId = queue.shift()!
+    if (seen.has(depModId)) continue
+    seen.add(depModId)
+
+    // skip if already installed
     if (Object.values(json.assets).some((m) => m.cfModId === depModId)) continue
+
     try {
       onProgress?.(`Buscando dependencia #${depModId}...`)
-      const filesData = (await cfGetModFiles(depModId, mcVersion, loaderType || undefined)) as any
-      const files: any[] = filesData?.data ?? []
-      if (files.length === 0) { depsFailed.push({ modId: depModId, error: 'Sin versiones compatibles' }); continue }
-      const depResult = await installCfSingle(instanceId, 'mods', depModId, files[0].id, json, onProgress)
+      // Try with full filters first, then progressively relax them
+      let files: any[] = ((await cfGetModFiles(depModId, mcVersion, loaderType || undefined)) as any)?.data ?? []
+      if (files.length === 0 && loaderType) {
+        files = ((await cfGetModFiles(depModId, mcVersion)) as any)?.data ?? []
+      }
+      if (files.length === 0) {
+        files = ((await cfGetModFiles(depModId)) as any)?.data ?? []
+      }
+      if (files.length === 0) {
+        depsFailed.push({ modId: depModId, error: 'Sin versiones compatibles' })
+        continue
+      }
+
+      const bestFile = files[0]
+      const depResult = await installCfSingle(instanceId, 'mods', depModId, bestFile.id, json, onProgress)
       depsInstalled.push(depResult)
+
+      // Collect transitive deps from the file data we already have (no extra API call).
+      // Merge with any cfDeps set by installCfSingle's enrichment.
+      const fromFile: number[] = (bestFile.dependencies ?? [])
+        .filter((d: any) => d.relationType === 3)
+        .map((d: any) => d.modId as number)
+      const fromJson: number[] = json.assets[depResult.filename]?.cfDeps ?? []
+      const allTransitive = [...new Set([...fromFile, ...fromJson])]
+      if (allTransitive.length > 0 && json.assets[depResult.filename]) {
+        json.assets[depResult.filename].cfDeps = allTransitive
+      }
+      for (const td of allTransitive) {
+        if (!seen.has(td)) queue.push(td)
+      }
     } catch (err: any) {
       depsFailed.push({ modId: depModId, error: err.message ?? 'Error desconocido' })
     }
+  }
+
+  // Enrich failed dep entries with mod names (best-effort batch call)
+  if (depsFailed.length > 0) {
+    try {
+      const modData = await cfGetModsBatch(depsFailed.map((d) => d.modId))
+      for (const d of depsFailed) {
+        if (modData[d.modId]?.name) d.name = modData[d.modId].name
+      }
+    } catch { /* optional */ }
   }
 
   writeAssetsJson(instanceId, 'mods', json)

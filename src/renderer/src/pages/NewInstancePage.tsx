@@ -3,17 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Loader2, AlertCircle, Plus } from 'lucide-react'
 import ProgressBar from '../components/ProgressBar'
 import FilterSelect from '../components/common/FilterSelect'
-import type { ModLoader, McVersion } from '../types'
+import type { ModLoader, McVersion, InstallProgress } from '../types'
 import { LOADER_NAMES } from '../constants'
 import { useInstall } from '../context/InstallContext'
 
 type Tab = 'vanilla' | 'modded'
 type VersionFilter = 'release' | 'snapshot' | 'all'
 
-interface DownloadProgress {
-  stage: string
-  percent: number
-}
 
 const INPUT_CLASS = 'w-full bg-gray-800/80 border border-gray-700/80 rounded-xl px-4 py-2.5 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20 transition-all disabled:opacity-50'
 
@@ -36,7 +32,7 @@ export default function NewInstancePage() {
   const [creating, setCreating] = useState(false)
   const isGloballyInstalling = globalInstalling.length > 0 && !creating
   const [error, setError] = useState('')
-  const [progress, setProgress] = useState<DownloadProgress | null>(null)
+  const [progress, setProgress] = useState<InstallProgress | null>(null)
   const [installLog, setInstallLog] = useState<string[]>([])
   const logRef = useRef<HTMLDivElement>(null)
 

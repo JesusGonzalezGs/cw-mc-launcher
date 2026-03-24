@@ -7,39 +7,23 @@ import {
 import { mrSearch, mrGetProject, mrGetProjectVersions } from '../api/mrApi'
 import ImageViewer from './ImageViewer'
 import FilterSelect from './common/FilterSelect'
-import type { Instance } from '../types'
+import type { Instance, Source, NormLoader } from '../types'
+import {
+  CF_LOADER_ID_TO_NAME, CF_LOADER_BADGE_COLORS, CF_LOADER_ID_BADGE_COLORS,
+  MR_LOADER_BADGE_COLORS, DEFAULT_LOADER_BADGE_COLOR,
+  formatDownloads, formatDate,
+} from '../constants'
 
 // ── CF constants ───────────────────────────────────────────────────────────────
-const CF_LOADER_NAMES: Record<number, string> = { 1: 'Forge', 4: 'Fabric', 5: 'Quilt', 6: 'NeoForge' }
 const KNOWN_LOADER_NAMES = new Set(['Forge', 'Fabric', 'Quilt', 'NeoForge'])
 const CF_LOADER_NUM: Record<string, number> = { forge: 1, fabric: 4, quilt: 5, neoforge: 6 }
 
-const CF_LOADER_COLORS: Record<number, string> = {
-  1: 'bg-orange-500/15 text-orange-300 border-orange-500/25',
-  4: 'bg-blue-500/15 text-blue-300 border-blue-500/25',
-  5: 'bg-purple-500/15 text-purple-300 border-purple-500/25',
-  6: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25',
-}
-const CF_LOADER_NAME_COLORS: Record<string, string> = {
-  Forge:    'bg-orange-500/15 text-orange-300 border-orange-500/25',
-  Fabric:   'bg-blue-500/15 text-blue-300 border-blue-500/25',
-  Quilt:    'bg-purple-500/15 text-purple-300 border-purple-500/25',
-  NeoForge: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25',
-}
-
-// ── MR constants ───────────────────────────────────────────────────────────────
-const MR_LOADER_COLORS: Record<string, string> = {
-  forge:    'bg-orange-500/15 text-orange-300 border-orange-500/25',
-  fabric:   'bg-blue-500/15 text-blue-300 border-blue-500/25',
-  quilt:    'bg-purple-500/15 text-purple-300 border-purple-500/25',
-  neoforge: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25',
-}
 const MR_SORT_OPTIONS = [
   { value: 'relevance', label: 'Relevancia' },
   { value: 'downloads', label: 'Descargas' },
-  { value: 'follows', label: 'Seguidores' },
-  { value: 'newest', label: 'Más nuevos' },
-  { value: 'updated', label: 'Actualización' },
+  { value: 'follows',   label: 'Seguidores' },
+  { value: 'newest',    label: 'Más nuevos' },
+  { value: 'updated',   label: 'Actualización' },
 ]
 
 const CF_SORT_OPTIONS = [
@@ -77,7 +61,7 @@ const MC_VERSION_OPTIONS = [
 
 const CF_LOADER_OPTIONS = [
   { value: '', label: 'Todos los loaders' },
-  ...Object.entries(CF_LOADER_NAMES).map(([k, v]) => ({ value: k, label: v })),
+  ...Object.entries(CF_LOADER_ID_TO_NAME).map(([k, v]) => ({ value: k, label: v })),
 ]
 
 const MR_LOADER_OPTIONS = [
@@ -89,19 +73,6 @@ const MR_LOADER_OPTIONS = [
 ]
 
 const PAGE_SIZE = 20
-
-function formatDownloads(n: number): string {
-  if (!n) return '0'
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
-  if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`
-  return n.toString()
-}
-
-function formatDate(isoDate: string): string | null {
-  if (!isoDate) return null
-  return new Date(isoDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })
-}
 
 function getFileLoader(file: any): string | null {
   const fromGV = (file.gameVersions || []).find((v: string) => KNOWN_LOADER_NAMES.has(v))
@@ -132,7 +103,6 @@ function pickFileId(mod: any, version: string, loader: string): number | null {
 
 
 // ── Norm types & adapters ──────────────────────────────────────────────────────
-interface NormLoader { key: string; label: string; colorClass: string }
 interface NormVersion {
   id: string
   name: string
@@ -147,7 +117,7 @@ function cfFileToNormVersion(file: any): NormVersion {
     id: String(file.id),
     name: file.displayName || file.fileName,
     gameVersions: (file.gameVersions || []).filter((v: string) => /^\d+\.\d+/.test(v)),
-    loaders: loaderName ? [{ key: loaderName, label: loaderName, colorClass: CF_LOADER_NAME_COLORS[loaderName] ?? 'bg-gray-700/60 border-gray-600/60 text-gray-400' }] : [],
+    loaders: loaderName ? [{ key: loaderName, label: loaderName, colorClass: CF_LOADER_BADGE_COLORS[loaderName] ?? DEFAULT_LOADER_BADGE_COLOR }] : [],
     date: formatDate(file.fileDate),
   }
 }
@@ -157,8 +127,8 @@ function mrVerToNormVersion(ver: any): NormVersion {
     id: ver.id,
     name: ver.name,
     gameVersions: (ver.game_versions as string[]).filter(v => /^\d+\.\d+/.test(v)),
-    loaders: (ver.loaders as string[]).filter(l => MR_LOADER_COLORS[l]).map(l => ({
-      key: l, label: l.charAt(0).toUpperCase() + l.slice(1), colorClass: MR_LOADER_COLORS[l],
+    loaders: (ver.loaders as string[]).filter(l => MR_LOADER_BADGE_COLORS[l]).map(l => ({
+      key: l, label: l.charAt(0).toUpperCase() + l.slice(1), colorClass: MR_LOADER_BADGE_COLORS[l],
     })),
     date: formatDate(ver.date_published),
   }
@@ -166,7 +136,7 @@ function mrVerToNormVersion(ver: any): NormVersion {
 
 function pickBestNormVersion(normVersions: NormVersion[], mcVersion: string, loader: string, source: Source): NormVersion | null {
   if (normVersions.length === 0) return null
-  const loaderKey = source === 'cf' ? (CF_LOADER_NAMES[Number(loader)] ?? '') : loader
+  const loaderKey = source === 'cf' ? (CF_LOADER_ID_TO_NAME[Number(loader)] ?? '') : loader
   return normVersions.find(v =>
     (!mcVersion || v.gameVersions.includes(mcVersion)) &&
     (!loaderKey || v.loaders.some(l => l.key === loaderKey))
@@ -195,11 +165,11 @@ function ModCard({ mod, source, installing, installed, error, onInstall, onDetai
   const downloads = isCf ? mod.downloadCount : mod.downloads
   const loaders: NormLoader[] = isCf
     ? ([...new Set((mod.latestFilesIndexes || []).map((f: any) => f.modLoader as number))].filter(Boolean) as number[])
-        .slice(0, 3).filter(l => CF_LOADER_NAMES[l])
-        .map(l => ({ key: String(l), label: CF_LOADER_NAMES[l], colorClass: CF_LOADER_COLORS[l] ?? 'bg-gray-700/60 border-gray-600/60 text-gray-400' }))
-    : ((mod.display_categories?.filter((c: string) => MR_LOADER_COLORS[c]) ?? []) as string[])
+        .slice(0, 3).filter(l => CF_LOADER_ID_TO_NAME[l])
+        .map(l => ({ key: String(l), label: CF_LOADER_ID_TO_NAME[l], colorClass: CF_LOADER_ID_BADGE_COLORS[l] ?? DEFAULT_LOADER_BADGE_COLOR }))
+    : ((mod.display_categories?.filter((c: string) => MR_LOADER_BADGE_COLORS[c]) ?? []) as string[])
         .slice(0, 3)
-        .map((l: string) => ({ key: l, label: l.charAt(0).toUpperCase() + l.slice(1), colorClass: MR_LOADER_COLORS[l] ?? 'bg-gray-700/60 border-gray-600/60 text-gray-400' }))
+        .map((l: string) => ({ key: l, label: l.charAt(0).toUpperCase() + l.slice(1), colorClass: MR_LOADER_BADGE_COLORS[l] ?? DEFAULT_LOADER_BADGE_COLOR }))
   const compatible = isCf
     ? pickFileId(mod, version, loader) !== null
     : (mod.versions?.length ?? 0) > 0
@@ -298,10 +268,10 @@ function ModDetailView({ mod, source, installingVersionId, installed, installErr
     : (mod.author ?? null)
   const headerLoaders: NormLoader[] = isCf
     ? ([...new Set((mod.latestFilesIndexes || []).map((f: any) => f.modLoader as number))].filter(Boolean) as number[])
-        .slice(0, 4).filter(l => CF_LOADER_NAMES[l])
-        .map(l => ({ key: String(l), label: CF_LOADER_NAMES[l], colorClass: CF_LOADER_COLORS[l] ?? 'bg-gray-700/60 border-gray-600/60 text-gray-400' }))
-    : ((mod.display_categories ?? mod.categories ?? []).filter((c: string) => MR_LOADER_COLORS[c]) as string[])
-        .map((l: string) => ({ key: l, label: l.charAt(0).toUpperCase() + l.slice(1), colorClass: MR_LOADER_COLORS[l] }))
+        .slice(0, 4).filter(l => CF_LOADER_ID_TO_NAME[l])
+        .map(l => ({ key: String(l), label: CF_LOADER_ID_TO_NAME[l], colorClass: CF_LOADER_ID_BADGE_COLORS[l] ?? DEFAULT_LOADER_BADGE_COLOR }))
+    : ((mod.display_categories ?? mod.categories ?? []).filter((c: string) => MR_LOADER_BADGE_COLORS[c]) as string[])
+        .map((l: string) => ({ key: l, label: l.charAt(0).toUpperCase() + l.slice(1), colorClass: MR_LOADER_BADGE_COLORS[l] }))
   const screenshots: { key: string; url: string; thumbUrl: string; title?: string }[] = isCf
     ? (mod.screenshots ?? []).map((s: any) => ({ key: String(s.id), url: s.url || s.thumbnailUrl, thumbUrl: s.thumbnailUrl || s.url, title: s.title }))
     : mrGallery.map((g: any, i: number) => ({ key: String(i), url: g.url, thumbUrl: g.url, title: g.title }))
@@ -351,7 +321,7 @@ function ModDetailView({ mod, source, installingVersionId, installed, installErr
       setNormVersions(nv)
       const hasVersion = nv.some(v => v.gameVersions.includes(version))
       setVersionFilter(version && hasVersion ? version : '')
-      const loaderKey = isCf ? (CF_LOADER_NAMES[Number(loader)] ?? '') : loader
+      const loaderKey = isCf ? (CF_LOADER_ID_TO_NAME[Number(loader)] ?? '') : loader
       const hasLoader = nv.some(v => v.loaders.some(l => l.key === loaderKey))
       setLoaderFilter(loaderKey && hasLoader ? loaderKey : '')
     }).catch(() => {}).finally(() => setLoadingVersions(false))
@@ -539,8 +509,6 @@ interface Props {
   initialMod?: any
 }
 
-type Source = 'cf' | 'mr'
-
 export default function ModCatalogModal({ instance, onClose, onModInstalled, installedModIds: parentInstalledIds, installedMrSlugs: parentInstalledMrSlugs, modsMeta, defaultSource = 'cf', initialMod }: Props) {
   const [source, setSource] = useState<Source>(defaultSource)
   const [search, setSearch] = useState('')
@@ -614,6 +582,7 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
           gameVersion: version,
           modLoaderType: loader ? Number(loader) : undefined,
           sortField: Number(sortField),
+          sortOrder: 'desc',
           index: page * PAGE_SIZE,
           pageSize: PAGE_SIZE,
         }) as Promise<any>).then(r => ({ data: r.data ?? [], total: r.pagination?.totalCount ?? 0 }))

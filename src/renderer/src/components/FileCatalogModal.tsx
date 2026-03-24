@@ -7,7 +7,8 @@ import {
 import { mrSearch, mrGetProject, mrGetProjectVersions } from '../api/mrApi'
 import ImageViewer from './ImageViewer'
 import FilterSelect from './common/FilterSelect'
-import type { Instance } from '../types'
+import type { Instance, Source } from '../types'
+import { formatDownloads, formatDate } from '../constants'
 
 // ── CurseForge class / category IDs ──────────────────────────────────────────
 export const FILE_CLASS: Record<string, { classId?: number; categoryId?: number; label: string; folder: string; icon: React.ElementType; mrProjectType: string }> = {
@@ -34,20 +35,6 @@ const MR_SORT_OPTIONS = [
 const PAGE_SIZE = 20
 const FILES_PER_PAGE = 15
 
-type Source = 'cf' | 'mr'
-
-function formatDownloads(n: number): string {
-  if (!n) return '0'
-  if (n >= 1e9) return `${(n / 1e9).toFixed(1)}B`
-  if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
-  if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`
-  return n.toString()
-}
-
-function formatFileDate(isoDate: string): string | null {
-  if (!isoDate) return null
-  return new Date(isoDate).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })
-}
 
 // ── Norm types & adapters ──────────────────────────────────────────────────────
 interface NormFileVersion { id: string; name: string; gameVersions: string[]; date: string | null }
@@ -57,7 +44,7 @@ function cfFileToNorm(file: any): NormFileVersion {
     id: String(file.id),
     name: file.displayName || file.fileName,
     gameVersions: (file.gameVersions || []).filter((v: string) => /^\d+\.\d+/.test(v)),
-    date: formatFileDate(file.fileDate),
+    date: formatDate(file.fileDate),
   }
 }
 
@@ -66,7 +53,7 @@ function mrVerToNorm(ver: any): NormFileVersion {
     id: ver.id,
     name: ver.name,
     gameVersions: (ver.game_versions as string[]).filter(v => /^\d+\.\d+/.test(v)),
-    date: formatFileDate(ver.date_published),
+    date: formatDate(ver.date_published),
   }
 }
 

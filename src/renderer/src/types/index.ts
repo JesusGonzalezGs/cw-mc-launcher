@@ -1,4 +1,5 @@
 export type ModLoader = 'vanilla' | 'fabric' | 'quilt' | 'forge' | 'neoforge'
+export type Source = 'cf' | 'mr'
 
 export interface LauncherUser {
   id: string
@@ -98,11 +99,18 @@ export interface AssetsJson {
   assets: Record<string, AssetMeta>
 }
 
+export interface NormLoader {
+  key: string
+  label: string
+  colorClass: string
+}
+
 export interface CfMod {
   id: number
   name: string
+  slug?: string
   summary: string
-  logo?: { url: string }
+  logo?: { thumbnailUrl: string; url: string }
   downloadCount: number
   dateModified: string
   latestFiles?: CfFile[]

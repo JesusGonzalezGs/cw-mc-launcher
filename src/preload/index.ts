@@ -1,11 +1,15 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-// Increase limit to avoid MaxListenersExceededWarning from HMR / multiple mounts
-ipcRenderer.setMaxListeners(30)
+// Single ipcRenderer listener per channel; subscribers stored in a Set.
+// Avoids MaxListenersExceededWarning regardless of how many components subscribe.
+const _subs = new Map<string, Set<(...args: any[]) => void>>()
 
-// Per-(callback, channel) listener map — supports same callback on multiple channels
-// key: callback function reference; value: Map<channel, wrappedFn>
-const _listenerMap = new Map<(...args: any[]) => void, Map<string, (...args: any[]) => void>>()
+function _ensureChannel(channel: string) {
+  if (_subs.has(channel)) return
+  const set = new Set<(...args: any[]) => void>()
+  _subs.set(channel, set)
+  ipcRenderer.on(channel, (_event, ...args) => { for (const fn of set) fn(...args) })
+}
 
 // Canales permitidos para eventos entrantes (main → renderer)
 const ALLOWED_EVENTS = [
@@ -182,19 +186,11 @@ contextBridge.exposeInMainWorld('launcher', {
   // ── Eventos de main → renderer ───────────────────────────────────────────────
   on: (channel: string, callback: (...args: any[]) => void) => {
     if (!(ALLOWED_EVENTS as readonly string[]).includes(channel)) return
-    const wrapped = (_event: Electron.IpcRendererEvent, ...args: unknown[]) => callback(...args)
-    if (!_listenerMap.has(callback)) _listenerMap.set(callback, new Map())
-    _listenerMap.get(callback)!.set(channel, wrapped)
-    ipcRenderer.on(channel, wrapped)
+    _ensureChannel(channel)
+    _subs.get(channel)!.add(callback)
   },
   off: (channel: string, callback: (...args: any[]) => void) => {
     if (!(ALLOWED_EVENTS as readonly string[]).includes(channel)) return
-    const channelMap = _listenerMap.get(callback)
-    const wrapped = channelMap?.get(channel)
-    if (wrapped) {
-      ipcRenderer.removeListener(channel, wrapped)
-      channelMap!.delete(channel)
-      if (channelMap!.size === 0) _listenerMap.delete(callback)
-    }
+    _subs.get(channel)?.delete(callback)
   },
 })

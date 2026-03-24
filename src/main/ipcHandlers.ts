@@ -60,7 +60,7 @@ import {
   cfGetCategories,
 } from './services/curseforgeService'
 import { installCurseForgeModpack, installModrinthModpack, cancelInstall } from './services/modpackInstaller'
-import { installCfAsset, installCfAssetWithDeps, installMrAsset, readAssetsJson, removeAssetMeta, identifyAssets } from './services/assetManager'
+import { installCfAsset, installCfAssetWithDeps, installMrAsset, syncAssetsJson, removeAssetMeta, identifyAssets } from './services/assetManager'
 import { launchInstance, isInstanceRunning, stopInstance } from './services/gameLauncher'
 import { mrSearch, mrGetProject, mrGetProjectVersions, mrGetVersion } from './services/modrinthService'
 import path from 'path'
@@ -268,7 +268,7 @@ export function registerIpcHandlers(): void {
     return { ok: true }
   })
 
-  ipcMain.handle('instances:getModsMeta', (_, instanceId: string) => readAssetsJson(instanceId, 'mods'))
+  ipcMain.handle('instances:getModsMeta', (_, instanceId: string) => syncAssetsJson(instanceId, 'mods'))
 
   ipcMain.handle('instances:identifyMods', async (_, instanceId: string) => {
     const win = getMainWindow()
@@ -407,9 +407,7 @@ export function registerIpcHandlers(): void {
     return newFilename
   })
 
-  ipcMain.handle('instances:getFilesMeta', (_, id: string, folder: string) => {
-    return readAssetsJson(id, folder)
-  })
+  ipcMain.handle('instances:getFilesMeta', (_, id: string, folder: string) => syncAssetsJson(id, folder))
 
   ipcMain.handle('instances:identifyFiles', async (_, id: string, folder: string) => {
     await identifyAssets(id, folder)

@@ -8,6 +8,7 @@ import { LOADER_TYPE_MAP } from '../constants'
 import FilterSelect from '../components/common/FilterSelect'
 import { mrSearch } from '../api/mrApi'
 import type { CfMod } from '../types'
+import { CF_LOADER_ID_TO_NAME, CF_LOADER_ID_BADGE_COLORS, MR_LOADER_BADGE_COLORS, DEFAULT_LOADER_BADGE_COLOR, formatDownloads } from '../constants'
 
 // ── Constants ────────────────────────────────────────────────────────────────
 
@@ -44,30 +45,7 @@ const LOADER_OPTIONS_MR = [
   { value: 'quilt',    label: 'Quilt' },
 ]
 
-const CF_LOADER_NAMES: Record<number, string> = { 1: 'Forge', 4: 'Fabric', 5: 'Quilt', 6: 'NeoForge' }
-const CF_LOADER_COLORS: Record<number, string> = {
-  1: 'bg-orange-500/15 text-orange-300 border-orange-500/25',
-  4: 'bg-blue-500/15 text-blue-300 border-blue-500/25',
-  5: 'bg-purple-500/15 text-purple-300 border-purple-500/25',
-  6: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25',
-}
-
-const MR_LOADER_COLORS: Record<string, string> = {
-  forge:    'bg-orange-500/15 text-orange-300 border-orange-500/25',
-  fabric:   'bg-blue-500/15 text-blue-300 border-blue-500/25',
-  quilt:    'bg-purple-500/15 text-purple-300 border-purple-500/25',
-  neoforge: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25',
-}
-
 const KNOWN_LOADERS = new Set(['forge', 'fabric', 'quilt', 'neoforge', 'liteloader', 'modloader', 'rift'])
-
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
-function formatDownloads(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${Math.round(n / 1_000)}K`
-  return String(n)
-}
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
@@ -467,10 +445,10 @@ function ModpackCard({ mod, source, onClick }: { mod: any; source: 'cf' | 'mr'; 
 
   const loaders = isCf
     ? [...new Set((mod.latestFilesIndexes ?? []).map((f: any) => f.modLoader).filter(Boolean) as number[])]
-        .filter(l => CF_LOADER_NAMES[l])
-        .map(l => ({ key: String(l), label: CF_LOADER_NAMES[l], color: CF_LOADER_COLORS[l] ?? 'bg-gray-500/15 text-gray-300 border-gray-500/25' }))
+        .filter(l => CF_LOADER_ID_TO_NAME[l])
+        .map(l => ({ key: String(l), label: CF_LOADER_ID_TO_NAME[l], color: CF_LOADER_ID_BADGE_COLORS[l] ?? DEFAULT_LOADER_BADGE_COLOR }))
     : ((mod.display_categories ?? mod.categories ?? []).filter((c: string) => KNOWN_LOADERS.has(c)) as string[])
-        .map(l => ({ key: l, label: l.charAt(0).toUpperCase() + l.slice(1), color: MR_LOADER_COLORS[l] ?? 'bg-gray-500/15 text-gray-300 border-gray-500/25' }))
+        .map(l => ({ key: l, label: l.charAt(0).toUpperCase() + l.slice(1), color: MR_LOADER_BADGE_COLORS[l] ?? DEFAULT_LOADER_BADGE_COLOR }))
 
   const mcVersions = isCf
     ? [...new Set((mod.latestFilesIndexes ?? []).map((f: any) => f.gameVersion).filter((v: string) => v && /^\d+\.\d+/.test(v)) as string[])]

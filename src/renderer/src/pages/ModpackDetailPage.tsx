@@ -6,20 +6,12 @@ import Modal from '../components/common/Modal'
 import ImageViewer from '../components/ImageViewer'
 import FilterSelect from '../components/common/FilterSelect'
 import type { CfMod, CfFile } from '../types'
+import { CF_LOADER_ID_TO_NAME, CF_LOADER_BADGE_COLORS, DEFAULT_LOADER_BADGE_COLOR } from '../constants'
 import { useInstall } from '../context/InstallContext'
 import { mrGetProject, mrGetProjectVersions } from '../api/mrApi'
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const CF_LOADER_ID_TO_NAME: Record<number, string> = { 1: 'Forge', 4: 'Fabric', 5: 'Quilt', 6: 'NeoForge' }
-
-const LOADER_COLORS: Record<string, string> = {
-  Forge:    'bg-orange-500/15 text-orange-300 border-orange-500/25',
-  Fabric:   'bg-blue-500/15 text-blue-300 border-blue-500/25',
-  Quilt:    'bg-purple-500/15 text-purple-300 border-purple-500/25',
-  NeoForge: 'bg-yellow-500/15 text-yellow-300 border-yellow-500/25',
-}
-const DEFAULT_LOADER_COLOR = 'bg-gray-500/15 text-gray-300 border-gray-500/25'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -111,7 +103,7 @@ function normalizeCfFile(file: CfFile, fallbackMcVersions: string[], fallbackLoa
     id: String(file.id),
     name: file.displayName || file.fileName || '',
     mcVersions: mcVersions.length > 0 ? mcVersions : fallbackMcVersions,
-    loaders: loaderName ? [{ name: loaderName, color: LOADER_COLORS[loaderName] ?? DEFAULT_LOADER_COLOR }] : [],
+    loaders: loaderName ? [{ name: loaderName, color: CF_LOADER_BADGE_COLORS[loaderName] ?? DEFAULT_LOADER_BADGE_COLOR }] : [],
     fileSize: (file as any).fileLength,
     datePublished: file.fileDate,
     versionType: (file as any).releaseType === 2 ? 'beta' : (file as any).releaseType === 3 ? 'alpha' : 'release',
@@ -127,7 +119,7 @@ function normalizeMrVersion(ver: any): NormalizedVersion {
     mcVersions,
     loaders: (ver.loaders ?? []).map((l: string) => {
       const name = l.charAt(0).toUpperCase() + l.slice(1)
-      return { name, color: LOADER_COLORS[name] ?? DEFAULT_LOADER_COLOR }
+      return { name, color: CF_LOADER_BADGE_COLORS[name] ?? DEFAULT_LOADER_BADGE_COLOR }
     }),
     fileSize: primaryFile?.size,
     datePublished: ver.date_published,
@@ -151,7 +143,7 @@ function buildCfData(mod: CfMod, description: string, files: CfFile[]): PageData
     authors: ((mod as any)?.authors ?? []).map((a: any) => a.name),
     categories: ((mod as any)?.categories ?? []).slice(0, 6).map((c: any) => ({ name: c.name, iconUrl: c.iconUrl })),
     loaders: loaderNums
-      .map(num => ({ name: CF_LOADER_ID_TO_NAME[num], color: LOADER_COLORS[CF_LOADER_ID_TO_NAME[num]] ?? DEFAULT_LOADER_COLOR }))
+      .map(num => ({ name: CF_LOADER_ID_TO_NAME[num], color: CF_LOADER_BADGE_COLORS[CF_LOADER_ID_TO_NAME[num]] ?? DEFAULT_LOADER_BADGE_COLOR }))
       .filter(l => l.name),
     mcVersions: fallbackMcVers,
     downloads: mod.downloadCount ?? 0,
@@ -178,7 +170,7 @@ function buildMrData(proj: any, vers: any[]): PageData {
     categories: (proj.categories ?? []).slice(0, 8).map((c: string) => ({ name: c })),
     loaders: (proj.loaders ?? []).map((l: string) => {
       const name = l.charAt(0).toUpperCase() + l.slice(1)
-      return { name, color: LOADER_COLORS[name] ?? DEFAULT_LOADER_COLOR }
+      return { name, color: CF_LOADER_BADGE_COLORS[name] ?? DEFAULT_LOADER_BADGE_COLOR }
     }),
     mcVersions: (proj.game_versions ?? []).filter((v: string) => /^\d+\.\d+/.test(v)),
     downloads: proj.downloads ?? 0,
