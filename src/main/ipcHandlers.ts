@@ -55,17 +55,14 @@ import {
   cfGetMod,
   cfGetModDescription,
   cfGetModFiles,
-  cfGetDownloadUrl,
   cfGetFileDetails,
   cfGetFileChangelog,
   cfGetCategories,
 } from './services/curseforgeService'
-import { installCurseForgeModpack, cancelInstall } from './services/modpackInstaller'
-import { installModWithDeps, readModsJson, removeModMeta, identifyMods } from './services/modManager'
-import { installFileWithMeta, identifyFiles, readFilesJson, removeFileMeta } from './services/fileManager'
+import { installCurseForgeModpack, installModrinthModpack, cancelInstall } from './services/modpackInstaller'
+import { installCfAsset, installCfAssetWithDeps, installMrAsset, readAssetsJson, removeAssetMeta, identifyAssets } from './services/assetManager'
 import { launchInstance, isInstanceRunning, stopInstance } from './services/gameLauncher'
-import { mrSearch, mrGetProject, mrGetProjectVersions, mrGetVersion, mrInstallVersion, mrInstallModpack, cancelMrInstall } from './services/modrinthService'
-import { downloadFile } from './utils/downloadHelper'
+import { mrSearch, mrGetProject, mrGetProjectVersions, mrGetVersion } from './services/modrinthService'
 import path from 'path'
 import fs from 'fs'
 import { spawn } from 'child_process'
@@ -267,40 +264,39 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('instances:removeMod', (_, id: string, filename: string) => {
     removeMod(id, filename)
-    removeModMeta(id, filename)
+    removeAssetMeta(id, 'mods', filename)
     return { ok: true }
   })
 
-  ipcMain.handle('instances:getModsMeta', (_, instanceId: string) => readModsJson(instanceId))
+  ipcMain.handle('instances:getModsMeta', (_, instanceId: string) => readAssetsJson(instanceId, 'mods'))
 
   ipcMain.handle('instances:identifyMods', async (_, instanceId: string) => {
     const win = getMainWindow()
-    await identifyMods(instanceId, (msg) => {
+    await identifyAssets(instanceId, 'mods', (msg) => {
       win?.webContents.send('mod:installProgress', { instanceId, msg })
     })
     return { ok: true }
   })
 
-  ipcMain.handle('instances:installModWithDeps', async (_, instanceId: string, modId: number, fileId: number) => {
+  // ── CurseForge asset installs (unified cf namespace) ─────────────────────────
+  ipcMain.handle('cf:installMod', async (_, instanceId: string, modId: number, fileId: number) => {
+    const filename = await installCfAsset(instanceId, 'mods', modId, fileId)
+    return { ok: true, filename }
+  })
+
+  ipcMain.handle('cf:installModWithDeps', async (_, instanceId: string, modId: number, fileId: number) => {
     const inst = getInstance(instanceId)
     if (!inst) throw new Error(`Instancia ${instanceId} no encontrada`)
     const win = getMainWindow()
-    const result = await installModWithDeps(instanceId, modId, fileId, inst.mcVersion, inst.modLoader, (msg) => {
-      win?.webContents.send('mod:installProgress', { instanceId, msg })
+    const result = await installCfAssetWithDeps(instanceId, modId, fileId, inst.mcVersion, inst.modLoader, (msg) => {
+      win?.webContents.send('cf:installProgress', { instanceId, msg })
     })
     win?.webContents.send('mods:changed', { instanceId })
     return result
   })
 
-  ipcMain.handle('instances:installMod', async (_, instanceId: string, modId: number, fileId: number) => {
-    const url = await cfGetDownloadUrl(modId, fileId)
-    if (!url) throw new Error('No se pudo obtener la URL del mod')
-    const instanceDir = getInstanceDir(instanceId)
-    const modsDir = path.join(instanceDir, 'mods')
-    fs.mkdirSync(modsDir, { recursive: true })
-    const filename = decodeURIComponent(url.split('/').pop() ?? `mod-${fileId}.jar`)
-    const destPath = path.join(modsDir, filename)
-    await downloadFile(url, destPath)
+  ipcMain.handle('cf:installFile', async (_, id: string, folder: string, modId: number, fileId: number) => {
+    const filename = await installCfAsset(id, folder, modId, fileId)
     return { ok: true, filename }
   })
 
@@ -411,17 +407,12 @@ export function registerIpcHandlers(): void {
     return newFilename
   })
 
-  ipcMain.handle('instances:installFile', async (_, id: string, folder: string, modId: number, fileId: number) => {
-    const filename = await installFileWithMeta(id, folder, modId, fileId)
-    return { ok: true, filename }
-  })
-
   ipcMain.handle('instances:getFilesMeta', (_, id: string, folder: string) => {
-    return readFilesJson(id, folder)
+    return readAssetsJson(id, folder)
   })
 
   ipcMain.handle('instances:identifyFiles', async (_, id: string, folder: string) => {
-    await identifyFiles(id, folder)
+    await identifyAssets(id, folder)
   })
 
   ipcMain.handle('instances:listFolder', (_, id: string, folder: string): { name: string; isDir: boolean }[] => {
@@ -439,7 +430,7 @@ export function registerIpcHandlers(): void {
     const stat = fs.statSync(fp)
     if (stat.isDirectory()) fs.rmSync(fp, { recursive: true, force: true })
     else fs.unlinkSync(fp)
-    removeFileMeta(id, folder, filename)
+    removeAssetMeta(id, folder, filename)
   })
 
   ipcMain.handle('instances:openSubFolder', (_, id: string, folder: string) => {
@@ -503,7 +494,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle('mr:getVersion', (_, id: string) => mrGetVersion(id))
 
   ipcMain.handle('mr:installVersion', async (_, instanceId: string, versionId: string, folder: string, mrSlug?: string) => {
-    const result = await mrInstallVersion(instanceId, versionId, folder, mrSlug)
+    const result = await installMrAsset(instanceId, versionId, folder, mrSlug)
     const win = getMainWindow()
     win?.webContents.send('mods:changed', { instanceId })
     return result
@@ -511,14 +502,14 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle('mr:installModpack', async (_, projectId: string, versionId: string, name: string, logoUrl?: string) => {
     const win = getMainWindow()
-    const instance = await mrInstallModpack(projectId, versionId, name, logoUrl, (p) => {
+    const instance = await installModrinthModpack(projectId, versionId, name, logoUrl, (p) => {
       win?.webContents.send('mr:installModpack:progress', p)
     })
     return instance
   })
 
   ipcMain.handle('mr:cancelInstall', () => {
-    cancelMrInstall()
+    cancelInstall()
     return { ok: true }
   })
 }

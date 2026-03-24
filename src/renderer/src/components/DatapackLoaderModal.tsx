@@ -70,7 +70,7 @@ export default function DatapackLoaderModal({ instance, onClose, onInstalled }: 
       const filesRes: any = await window.launcher.cf.getModFiles(entry.curseforgeId, instance.mcVersion, loaderNum)
       const files: any[] = filesRes?.data ?? []
       if (files.length === 0) throw new Error('No hay archivos compatibles para esta versión')
-      await window.launcher.instances.installModWithDeps(instance.id, entry.curseforgeId, files[0].id)
+      await window.launcher.cf.installModWithDeps(instance.id, entry.curseforgeId, files[0].id)
       setInstalled(prev => new Set([...prev, entry.slug]))
       onInstalled()
     } catch (err: any) {

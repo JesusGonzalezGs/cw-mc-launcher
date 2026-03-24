@@ -677,7 +677,7 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
     setInstallErrors(prev => { const n = { ...prev }; delete n[mod.id]; return n })
     setDepsNotice(null)
     try {
-      const result = await (window.launcher.instances.installModWithDeps(instance.id, mod.id, fileId) as Promise<any>)
+      const result = await (window.launcher.cf.installModWithDeps(instance.id, mod.id, fileId) as Promise<any>)
       setInstalledIds(prev => new Set([...prev, mod.id]))
       if ((result.depsInstalled?.length ?? 0) > 0 || (result.depsFailed?.length ?? 0) > 0) {
         setDepsNotice({ deps: result.depsInstalled ?? [], failedDeps: result.depsFailed ?? [] })
@@ -797,8 +797,8 @@ export default function ModCatalogModal({ instance, onClose, onModInstalled, ins
                 if (!modsMeta) return undefined
                 const vals = Object.values(modsMeta) as any[]
                 if (source === 'cf') {
-                  const entry = vals.find(m => m.modId === selectedMod.id)
-                  return entry?.fileId ? String(entry.fileId) : undefined
+                  const entry = vals.find(m => m.cfModId === selectedMod.id)
+                  return entry?.cfFileId ? String(entry.cfFileId) : undefined
                 } else {
                   const entry = vals.find(m => m.mrSlug === selectedMod.slug)
                   return entry?.mrVersionId

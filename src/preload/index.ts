@@ -71,17 +71,12 @@ contextBridge.exposeInMainWorld('launcher', {
     getModsMeta: (id: string) => ipcRenderer.invoke('instances:getModsMeta', id),
     toggleMod: (id: string, filename: string) => ipcRenderer.invoke('instances:toggleMod', id, filename),
     removeMod: (id: string, filename: string) => ipcRenderer.invoke('instances:removeMod', id, filename),
-    installMod: (instanceId: string, modId: number, fileId: number) =>
-      ipcRenderer.invoke('instances:installMod', instanceId, modId, fileId),
-    installModWithDeps: (instanceId: string, modId: number, fileId: number) =>
-      ipcRenderer.invoke('instances:installModWithDeps', instanceId, modId, fileId),
     identifyMods: (instanceId: string) =>
       ipcRenderer.invoke('instances:identifyMods', instanceId),
     openFolder: (id: string) => ipcRenderer.invoke('instances:openFolder', id),
     watchMods: (id: string) => ipcRenderer.invoke('instances:watchMods', id),
     unwatchMods: (id: string) => ipcRenderer.invoke('instances:unwatchMods', id),
     toggleFile: (id: string, folder: string, filename: string) => ipcRenderer.invoke('instances:toggleFile', id, folder, filename),
-    installFile: (id: string, folder: string, modId: number, fileId: number) => ipcRenderer.invoke('instances:installFile', id, folder, modId, fileId),
     listFolder: (id: string, folder: string) => ipcRenderer.invoke('instances:listFolder', id, folder),
     deleteFile: (id: string, folder: string, filename: string) => ipcRenderer.invoke('instances:deleteFile', id, folder, filename),
     getFilesMeta: (id: string, folder: string) => ipcRenderer.invoke('instances:getFilesMeta', id, folder),
@@ -123,7 +118,22 @@ contextBridge.exposeInMainWorld('launcher', {
       ipcRenderer.invoke('cf:getModFiles', modId, gameVersion, loaderType),
     installModpack: (modpackId: number, fileId: number, name: string, logoUrl?: string, fileVersion?: string, slug?: string) =>
       ipcRenderer.invoke('cf:installModpack', modpackId, fileId, name, logoUrl, fileVersion, slug),
+    installMod: (instanceId: string, modId: number, fileId: number) =>
+      ipcRenderer.invoke('cf:installMod', instanceId, modId, fileId),
+    installModWithDeps: (instanceId: string, modId: number, fileId: number) =>
+      ipcRenderer.invoke('cf:installModWithDeps', instanceId, modId, fileId),
+    installFile: (instanceId: string, folder: string, modId: number, fileId: number) =>
+      ipcRenderer.invoke('cf:installFile', instanceId, folder, modId, fileId),
     cancelInstall: () => ipcRenderer.invoke('cf:cancelInstall'),
+    onInstallProgress: (cb: (p: any) => void) => {
+      const wrapped = (_e: Electron.IpcRendererEvent, p: any) => cb(p)
+      ;(cb as any).__cfWrapped = wrapped
+      ipcRenderer.on('cf:installProgress', wrapped)
+      return () => {
+        ipcRenderer.removeListener('cf:installProgress', wrapped)
+        delete (cb as any).__cfWrapped
+      }
+    },
   },
 
   // ── Modrinth ─────────────────────────────────────────────────────────────────

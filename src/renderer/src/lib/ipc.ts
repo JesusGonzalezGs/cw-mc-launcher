@@ -41,20 +41,17 @@ declare global {
         stop: (id: string) => Promise<any>
         launch: (instance: any) => Promise<any>
         getMods: (id: string) => Promise<string[]>
-        getModsMeta: (id: string) => Promise<any>
+        getModsMeta: (id: string) => Promise<import('../types').AssetsJson>
         toggleMod: (id: string, filename: string) => Promise<string>
         removeMod: (id: string, filename: string) => Promise<any>
-        installMod: (instanceId: string, modId: number, fileId: number) => Promise<any>
-        installModWithDeps: (instanceId: string, modId: number, fileId: number) => Promise<any>
         identifyMods: (instanceId: string) => Promise<any>
         openFolder: (id: string) => Promise<void>
         watchMods: (id: string) => Promise<void>
         unwatchMods: (id: string) => Promise<void>
         toggleFile: (id: string, folder: string, filename: string) => Promise<string>
-        installFile: (id: string, folder: string, modId: number, fileId: number) => Promise<{ ok: boolean; filename: string }>
         listFolder: (id: string, folder: string) => Promise<{ name: string; isDir: boolean }[]>
         deleteFile: (id: string, folder: string, filename: string) => Promise<void>
-        getFilesMeta: (id: string, folder: string) => Promise<{ files: Record<string, any> }>
+        getFilesMeta: (id: string, folder: string) => Promise<import('../types').AssetsJson>
         identifyFiles: (id: string, folder: string) => Promise<void>
         openSubFolder: (id: string, folder: string) => Promise<void>
         getCrashReport: (id: string) => Promise<string | null>
@@ -85,7 +82,11 @@ declare global {
         installModpack: (modpackId: number, fileId: number, name: string, logoUrl?: string, fileVersion?: string, slug?: string) => Promise<any>
         getFileDetails: (modId: number, fileId: number) => Promise<any>
         getFileChangelog: (modId: number, fileId: number) => Promise<string>
+        installMod: (instanceId: string, modId: number, fileId: number) => Promise<{ ok: boolean; filename: string }>
+        installModWithDeps: (instanceId: string, modId: number, fileId: number) => Promise<any>
+        installFile: (instanceId: string, folder: string, modId: number, fileId: number) => Promise<{ ok: boolean; filename: string }>
         cancelInstall: () => Promise<void>
+        onInstallProgress: (cb: (p: import('../types').InstallProgress) => void) => () => void
       }
       settings: {
         get: () => Promise<any>

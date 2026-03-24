@@ -370,7 +370,7 @@ function buildInstalledIds(meta: Record<string, any> | undefined): Set<string> {
   const ids = new Set<string>()
   for (const m of Object.values(meta)) {
     if (m.mrSlug) ids.add(m.mrSlug)
-    else if ((m.modId ?? 0) > 0) ids.add(String(m.modId))
+    else if ((m.cfModId ?? 0) > 0) ids.add(String(m.cfModId))
   }
   return ids
 }
@@ -489,7 +489,7 @@ export default function FileCatalogModal({ instance, type, installedFiles: _inst
     setInstallingVersionId(fileId)
     setInstallErrors(prev => { const n = { ...prev }; delete n[key]; return n })
     try {
-      const result = await (window.launcher.instances.installFile(instance.id, folder, mod.id, Number(fileId)) as Promise<any>)
+      const result = await (window.launcher.cf.installFile(instance.id, folder, mod.id, Number(fileId)) as Promise<any>)
       setInstalledIds(prev => new Set([...prev, key]))
       onInstalled(result.filename)
     } catch (err: any) {
@@ -580,8 +580,8 @@ export default function FileCatalogModal({ instance, type, installedFiles: _inst
                 if (!installedMeta) return undefined
                 const vals = Object.values(installedMeta) as any[]
                 if (isCf) {
-                  const entry = vals.find(m => m.modId === selectedMod.id)
-                  return entry?.fileId ? String(entry.fileId) : undefined
+                  const entry = vals.find(m => m.cfModId === selectedMod.id)
+                  return entry?.cfFileId ? String(entry.cfFileId) : undefined
                 } else {
                   const entry = vals.find(m => m.mrSlug === selectedMod.slug)
                   return entry?.mrVersionId

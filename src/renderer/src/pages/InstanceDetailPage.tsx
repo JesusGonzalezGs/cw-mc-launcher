@@ -6,7 +6,7 @@ import {
   Search, AlertCircle, X, HelpCircle, FolderOpen, ExternalLink, ArrowUpDown,
   Layers, Image, Sparkles, Database, Flame,
 } from 'lucide-react'
-import type { Instance } from '../types'
+import type { Instance, AssetMeta } from '../types'
 import { LOADER_NAMES } from '../constants'
 import ModCatalogModal from '../components/ModCatalogModal'
 import FileCatalogModal from '../components/FileCatalogModal'
@@ -18,19 +18,6 @@ import { getInstanceLogs, appendInstanceLog, clearInstanceLogs } from '../lib/lo
 type Tab = 'resources' | 'console' | 'settings'
 type ResourceTab = 'mods' | 'datapacks' | 'resourcepacks' | 'shaderpacks'
 
-interface ModMeta {
-  modId: number
-  fileId: number
-  name: string
-  slug: string
-  mrSlug?: string
-  mrResolved?: boolean
-  logo?: string
-  summary?: string
-  gameVersions: string[]
-  recognized?: boolean
-  deps?: number[]
-}
 
 const LOADER_BADGE_COLORS: Record<string, string> = {
   vanilla:  'bg-green-500/15 text-green-300 border-green-500/25',
@@ -215,7 +202,7 @@ export default function InstanceDetailPage() {
   const [loadingResource, setLoadingResource] = useState(false)
   const [identifyingFiles, setIdentifyingFiles] = useState<string | null>(null)
   const [mods, setMods] = useState<string[]>([])
-  const [modsMeta, setModsMeta] = useState<Record<string, ModMeta>>({})
+  const [modsMeta, setModsMeta] = useState<Record<string, AssetMeta>>({})
   const [logs, setLogs] = useState<string[]>(() => id ? getInstanceLogs(id) : [])
   const [jvmArgs, setJvmArgs] = useState('')
   const [javaInfo, setJavaInfo] = useState<{ version: number; ready: boolean; status: string; progress: number; error: string } | null>(null)
@@ -242,7 +229,7 @@ export default function InstanceDetailPage() {
 
   const [catalogInitialMod, setCatalogInitialMod] = useState<{ mod: any; source: 'cf' | 'mr'; folder: 'mods' | ResourceTab } | null>(null)
 
-  async function openItemDetail(meta: { modId?: number; slug?: string; mrSlug?: string; recognized?: boolean } | undefined, folder: 'mods' | ResourceTab) {
+  async function openItemDetail(meta: AssetMeta | undefined, folder: 'mods' | ResourceTab) {
     if (!meta || meta.recognized === false) return
     try {
       if (meta.mrSlug) {
@@ -253,8 +240,8 @@ export default function InstanceDetailPage() {
         setCatalogInitialMod({ mod, source: 'mr', folder })
         if (folder === 'mods') setShowCatalog(true)
         else setShowFileCatalog(folder as ResourceTab)
-      } else if ((meta.modId ?? 0) > 0) {
-        const res = await window.launcher.cf.getMod(meta.modId!)
+      } else if ((meta.cfModId ?? 0) > 0) {
+        const res = await window.launcher.cf.getMod(meta.cfModId!)
         const mod = (res as any)?.data ?? res
         if (!mod) return
         setCatalogInitialMod({ mod, source: 'cf', folder })
@@ -289,12 +276,11 @@ export default function InstanceDetailPage() {
     try {
       const [files, meta] = await Promise.all([
         window.launcher.instances.getMods(id) as Promise<string[]>,
-        window.launcher.instances.getModsMeta(id) as Promise<{ mods: Record<string, ModMeta> }>,
+          window.launcher.instances.getModsMeta(id),
       ])
       setMods(files)
-      const metaMods = (meta as any).mods ?? {} as Record<string, ModMeta>
-      setModsMeta(metaMods)
-      return { files, metaMods }
+      setModsMeta(meta.assets)
+      return { files, metaMods: meta.assets }
     } catch { return null }
   }, [id])
 
@@ -325,7 +311,7 @@ export default function InstanceDetailPage() {
       const needsId = files.some(f => {
         const clean = f.replace('.jar.disabled', '.jar')
         const m = metaMods[clean] ?? metaMods[f]
-        return m?.recognized === undefined || (!m?.mrResolved && m?.recognized !== true)
+        return m?.recognized === undefined
       })
       if (needsId) {
         identifiedRef.current = true
@@ -369,7 +355,7 @@ export default function InstanceDetailPage() {
         const needsId = files.some(f => {
           const clean = f.replace('.jar.disabled', '.jar')
           const m = metaMods[clean] ?? metaMods[f]
-        return m?.recognized === undefined || (!m?.mrResolved && m?.recognized !== true)
+        return m?.recognized === undefined
         })
         if (!needsId) return
         identifyingModsRef.current = true
@@ -413,20 +399,19 @@ export default function InstanceDetailPage() {
       .then(([files, meta]) => {
         loadedFoldersRef.current.add(folder)
         setResourceFiles(prev => ({ ...prev, [folder]: files }))
-        const metaFiles = (meta as any).files ?? {}
-        setFilesMeta(prev => ({ ...prev, [folder]: metaFiles }))
+        setFilesMeta(prev => ({ ...prev, [folder]: meta.assets }))
 
         // Auto-identify: zips without recognized metadata
         const needsId = files.some(f => {
           const clean = f.name.replace('.disabled', '')
-          const existing = metaFiles[clean] ?? metaFiles[f.name]
+          const existing = meta.assets[clean] ?? meta.assets[f.name]
           return existing?.recognized === undefined
         })
         if (needsId && !identifyingFiles) {
           setIdentifyingFiles(folder)
           window.launcher.instances.identifyFiles(id, folder)
             .then(() => window.launcher.instances.getFilesMeta(id, folder))
-            .then(meta => setFilesMeta(prev => ({ ...prev, [folder]: (meta as any).files ?? {} })))
+            .then(m => setFilesMeta(prev => ({ ...prev, [folder]: m.assets })))
             .catch(() => {})
             .finally(() => setIdentifyingFiles(null))
         }
@@ -452,7 +437,7 @@ export default function InstanceDetailPage() {
     const ignored = localStorage.getItem(`datapackLoaderIgnored_${instance.id}`) === 'true'
     if (ignored) { setShowFileCatalog('datapacks'); return }
     const hasLoader = Object.values(modsMeta).some(m =>
-      DATAPACK_LOADER_SLUGS.has(m.slug) || DATAPACK_LOADER_IDS.has(m.modId)
+      DATAPACK_LOADER_SLUGS.has(m.slug) || DATAPACK_LOADER_IDS.has(m.cfModId ?? 0)
     )
     if (hasLoader) setShowFileCatalog('datapacks')
     else setShowDatapackLoaderModal(true)
@@ -489,7 +474,7 @@ export default function InstanceDetailPage() {
       if (isCurrentlyEnabled) {
         const cleanName = filename.replace('.jar.disabled', '.jar')
         const meta = modsMeta[cleanName] ?? modsMeta[filename]
-        const disabledModId = meta?.modId
+        const disabledModId = meta?.cfModId
 
         if (disabledModId && disabledModId > 0) {
           const queue = [disabledModId]
@@ -498,16 +483,16 @@ export default function InstanceDetailPage() {
           while (queue.length > 0) {
             const currentModId = queue.shift()!
             for (const [metaKey, m] of Object.entries(modsMeta)) {
-              if (!m.deps?.includes(currentModId)) continue
-              if (visited.has(m.modId)) continue
+              if (!m.cfDeps?.includes(currentModId)) continue
+              if (visited.has(m.cfModId!)) continue
               const enabledFile = mods.find(
                 (f) => !f.endsWith('.jar.disabled') &&
                   (f === metaKey || f.replace('.jar.disabled', '.jar') === metaKey)
               )
               if (enabledFile) {
                 await window.launcher.instances.toggleMod(id, enabledFile)
-                visited.add(m.modId)
-                queue.push(m.modId)
+                visited.add(m.cfModId!)
+                queue.push(m.cfModId!)
               }
             }
           }
@@ -544,7 +529,7 @@ export default function InstanceDetailPage() {
   }
 
   const installedModIds = useMemo(
-    () => new Set(Object.values(modsMeta).map(m => m.modId).filter(id => id > 0)),
+    () => new Set(Object.values(modsMeta).map(m => m.cfModId).filter((id): id is number => (id ?? 0) > 0)),
     [modsMeta]
   )
 
@@ -793,7 +778,7 @@ export default function InstanceDetailPage() {
                                 fallbackIcon={Package}
                                 onToggle={() => handleToggleMod(filename)}
                                 onDelete={() => setModToDelete(filename)}
-                                onOpen={(meta?.mrSlug || (meta?.modId ?? 0) > 0) ? () => openItemDetail(meta, 'mods') : undefined}
+                                onOpen={(meta?.mrSlug || (meta?.cfModId ?? 0) > 0) ? () => openItemDetail(meta, 'mods') : undefined}
                               />
                             )
                           })}
@@ -889,7 +874,7 @@ export default function InstanceDetailPage() {
                                   disabledAny={!!togglingFile}
                                   fallbackIcon={Icon}
                                   onToggle={() => handleToggleFile(entry)}
-                                  onOpen={(meta?.mrSlug || (meta?.modId ?? 0) > 0) ? () => openItemDetail(meta, resourceTab) : undefined}
+                                  onOpen={(meta?.mrSlug || (meta?.cfModId ?? 0) > 0) ? () => openItemDetail(meta, resourceTab) : undefined}
                                   onDelete={() => window.launcher.instances.deleteFile(id!, resourceTab, entry.name)
                                     .then(() => setResourceFiles(prev => ({ ...prev, [resourceTab]: prev[resourceTab].filter(f => f.name !== entry.name) })))}
                                 />
@@ -1247,9 +1232,8 @@ export default function InstanceDetailPage() {
               [folder]: [...(prev[folder] ?? []), { name: filename, isDir: false }],
             }))
             window.launcher.instances.getFilesMeta(id!, folder)
-              .then(meta => {
-                const files = (meta as any).files ?? {}
-                setFilesMeta(prev => ({ ...prev, [folder]: files }))
+              .then(m => {
+                setFilesMeta(prev => ({ ...prev, [folder]: m.assets }))
                 loadedFoldersRef.current.add(folder)
               })
               .catch(() => {})

@@ -78,6 +78,26 @@ export interface McVersion {
   releaseTime: string
 }
 
+export interface AssetMeta {
+  source: 'cf' | 'mr' | 'manual'
+  name: string
+  slug: string
+  logo?: string
+  summary?: string
+  gameVersions?: string[]
+  cfModId?: number
+  cfFileId?: number
+  cfDeps?: number[]
+  mrProjectId?: string
+  mrVersionId?: string
+  mrSlug?: string
+  recognized?: boolean
+}
+
+export interface AssetsJson {
+  assets: Record<string, AssetMeta>
+}
+
 export interface CfMod {
   id: number
   name: string
